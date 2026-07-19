@@ -24,6 +24,7 @@
 # Usage: copy next to an idea.md, then:
 #   python3 ~/.pi/agent/skills/agentx/deterministic-workflow/scripts/run_steps.py idea-to-plan.steps.yaml
 # Output: ./spec.md   (halts early with reasoning if the idea is NO-GO)
+version: 1
 workflow: idea-to-plan
 model: openai-codex/gpt-5.6-luna   # cheap-iteration default; flip to -sol for a finals run
 thinking: low

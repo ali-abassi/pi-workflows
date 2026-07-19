@@ -1,8 +1,16 @@
 {
   "name": "pi-workflows",
   "version": "0.1.0",
-  "private": true,
   "description": "Deterministic DAG workflows for Pi, Agent X, Codex, and Claude Code",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ali-abassi/pi-workflows.git"
+  },
+  "homepage": "https://github.com/ali-abassi/pi-workflows#readme",
+  "bugs": {
+    "url": "https://github.com/ali-abassi/pi-workflows/issues"
+  },
   "keywords": [
     "pi-package",
     "coding-agent",

@@ -1,6 +1,6 @@
 # Audit contract — 2026-07-19
 
-- Root: `/Users/aliabassi/pi-workflows`
+- Root: the repository checkout (or installed `PI_WORKFLOWS_HOME`)
 - Mode: repair and re-audit
 - Definition of done: the extracted product is independently installable and
   operable; Agent X, Codex, Claude Code, and Loops use documented adapters; the

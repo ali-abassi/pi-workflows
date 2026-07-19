@@ -8,7 +8,8 @@ runner, workflow schema, CLI contract, or agent skill.
 
 - Code owns control flow. Models may generate or judge artifacts, but cannot
   decide whether a gate passed or silently skip declared nodes.
-- `steps.yaml` is source truth. `steps.layout.json` is presentation state owned
+- Versioned `steps.yaml` is source truth; `schemas/workflow.schema.json` is its
+  machine-readable contract. `steps.layout.json` is presentation state owned
   by the graph canvas.
 - Validate before paid execution. A failed run exits non-zero and preserves its
   artifacts, event log, stderr, and ledger.
@@ -25,6 +26,7 @@ runner, workflow schema, CLI contract, or agent skill.
 
 ```text
 ./bin/piw doctor
+./bin/piw schema --json
 ./bin/piw ls
 ./bin/piw graph <workflow>
 ./bin/piw validate <workflow>

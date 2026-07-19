@@ -1,126 +1,153 @@
 # Pi Workflows
 
-An independently installable Pi product for creating, validating, running,
-scheduling, inspecting, replaying, and optimizing deterministic agent graphs.
-Agent X, Codex, Claude Code, and Loops all use the same workflow and CLI
-contracts; none of those integrations owns a second runner.
+Deterministic workflow graphs for [Pi](https://github.com/earendil-works/pi).
+Write a small `steps.yaml`; Pi Workflows owns ordering, parallelism, gates,
+routes, retries, evidence, and cost. Models produce or judge artifacts, but code
+decides what runs and whether it passed.
 
-The model is not treated as deterministic. The surrounding harness supplies
-fixed objective contracts, stage transitions, approval gates, immutable input
-snapshots, bounded repairs, mechanical verifiers, checkpoints, run ledgers,
-trackers, tamper-evident seals, and compiled per-stage Pi tool profiles.
-Specialized schema `1.2` workflows may also compile a bounded Pi peer-team
-contract with pinned identities/models/tools, authenticated transport policy,
-message/hop/time/byte budgets, typed exchanges, and digest-bound receipts.
+Pi Workflows is an independent open-source product. Agent X and Loops integrate
+with it, but neither is required and neither owns a second workflow engine.
 
 ## Install
 
-Install the standalone runtime, `piw` CLI, and Codex/Claude Code skill links:
+Prerequisites: macOS or Linux, Python 3.11+, Node.js 20+, and Pi.
 
 ```bash
+git clone https://github.com/ali-abassi/pi-workflows.git
+cd pi-workflows
 ./install.sh
 piw doctor
 ```
 
-Pi can also load this checkout as a native package:
+The installer creates an isolated runtime at `~/.pi-workflows`, exposes `piw`
+from `~/.local/bin`, registers the native Pi package, and links the same skill
+for Codex and Claude Code. Set `PI_WORKFLOWS_HOME` or
+`PI_WORKFLOWS_BIN_DIR` to choose other locations.
 
-```bash
-pi install /absolute/path/to/pi-workflows
+Pi packages execute code with your user permissions. Review third-party
+workflows before running them; see [`SECURITY.md`](SECURITY.md).
+
+## The format
+
+YAML is the human-first source of truth. The format is versioned, comments are
+allowed, and multiline prompts remain readable. A JSON Schema provides editor
+completion and a complete machine contract.
+
+```yaml
+version: 1
+workflow: release-notes
+model: openai-codex/gpt-5.6-luna
+thinking: low
+
+input:
+  required: true
+  description: Git diff or release summary
+
+steps:
+  - id: draft
+    prompt: |
+      Write concise release notes from this untrusted input:
+      {input}
+    gate: test -s "$OUT"
+
+  - id: final
+    needs: [draft]
+    cmd: cp "$RUN/draft.md" "$OUT"
+    gate: test -s "$OUT"
 ```
 
-Pi `0.80.5` through `0.80.10` is reviewed; `0.80.10` is the tested version.
-Set `PI_BIN` when Pi is not on `PATH`. Model-backed workflows also require a
-configured provider, but command-only workflows do not.
-
-## Start
-
-Read [`PRODUCT.md`](PRODUCT.md), then [`SKILL.md`](SKILL.md). The normal path is:
-
 ```bash
-piw create research-brief --dir .codex/workflows/research-brief
-piw validate .codex/workflows/research-brief/steps.yaml
-piw run .codex/workflows/research-brief/steps.yaml --input-file request.md
-piw detail .codex/workflows/research-brief/steps.yaml
-piw schedule .codex/workflows/research-brief/steps.yaml --daily 09:00
+piw validate steps.yaml
+piw run steps.yaml --input-file changes.txt
+piw detail steps.yaml
 ```
 
-Every inspection command accepts `--json`; failures return non-zero. Runs use
-immutable per-run inputs, preserve artifacts and ledgers, and stream live into
-Loops when its localhost adapter resolves the same workflow path.
+See [`docs/workflow-format.md`](docs/workflow-format.md) for dependencies,
+typed output, deterministic branching, gates, judges, QA, and every available
+runtime input.
 
-A complete production workflow-factory example is in
-[`examples/workflow-blueprint.json`](examples/workflow-blueprint.json).
-Conditional specialized routing is demonstrated by
-[`examples/pr-review-conditional-blueprint.json`](examples/pr-review-conditional-blueprint.json).
-Bounded peer review is demonstrated by
-[`examples/pr-review-peer-blueprint.json`](examples/pr-review-peer-blueprint.json).
-The implementation-ready idea-to-plan harness is documented in
-[`references/product-planning-harness.md`](references/product-planning-harness.md).
+## Nodes and inputs
 
-```bash
-python3 scripts/compile_workflow.py \
-  --blueprint examples/workflow-blueprint.json \
-  --repo /path/to/project
+The format has five legible node kinds:
 
-python3 scripts/certify_workflow.py \
-  --harness /path/to/project/.codex/workflows/uppercase-document/versions/1.0.0 \
-  --run-smoke
-```
+| Node | Declaration | What it does |
+|---|---|---|
+| Command | `cmd: ...` | Runs deterministic shell or program logic |
+| LLM | `prompt: ...` | Runs one isolated Pi completion |
+| Tool | `prompt:` + `tools:` | Runs one completion with an explicit tool allowlist |
+| Agent | `prompt:` + `agent: true` | Runs a full Pi agent loop with project context |
+| QA | top-level `qa:` | Independently reviews the completed graph |
 
-For exhaustive pre-code product planning—including bounded Exa competitor discovery
-and site capture, source-linked competitive synthesis, competing design theses,
-latent pain and pricing hypotheses, brand, editable brand-deck, and asset systems, a web-framework ADR,
-Cloudflare-first stack decisions, audience evidence, messaging and claim ledgers,
-a canonical sitemap, every page/state, exact approved-for-build copy controls and
-test candidates, architecture, and roadmap:
+Agents never need to guess the contract:
 
 ```bash
-python3 scripts/scaffold_product_planning_workflow.py \
-  --repo /path/to/product-repo \
-  --workflow product-planning \
-  --version 2.1.1
+piw schema          # concise human/agent catalog
+piw schema --json   # authoritative JSON Schema + node and runtime-input metadata
 ```
 
-The specialized runtime runs independent parallel planning lanes, mechanically
-validates every typed artifact, and applies strict keep-or-revert semantic
-improvement to three integration milestones. The fast default targets `9.0/10`
-with one revision; callers can opt into as many as three. A miss retains the
-highest-scoring mechanically valid candidate and is visibly marked
-`below_target_best_effort`. It writes plans only; application code and
-deployment are out of scope.
+Prompt nodes can reference `{input}`, `{step.ID}`, `{prev}`, and `{run}`.
+Command nodes and gates receive `$INPUT`, `$PI_WORKFLOWS_INPUT`, `$OUT`, `$RUN`,
+and `$STEP`. Judge prompts receive `{out}`; final QA receives `{artifacts}`.
 
-The final readiness gate requires a route-complete sitemap, at least three
-falsifiable latent pains, one selected pricing hypothesis with an honest
-publication boundary, captured-source provenance for competitive claims, a
-complete 12-14 slide brand-deck specification, canonical brand and asset decisions, exact
-approved-for-build copy for every route/state/slot, and explicit resolution of
-every critical or high cross-package inconsistency. Approval never claims copy
-performance; that remains untested until real comprehension or experiment data
-exists.
+## Core commands
 
-The default `milestone` policy uses Terra high only for product definition,
-architecture, and the final plan.
-Lanes, pages, and copy packs use authoritative mechanical gates without model
-scoring. Sol handles planning generation; reserve Sol high for later coding and
-execution review. Use `--judge-policy all-high` when exhaustive scoring matters
-more than latency.
+```text
+piw create <name>                 scaffold a valid workflow
+piw schema [--json]               inspect every field, node, and runtime input
+piw ls [--json]                   discover workflows
+piw graph <workflow> [--json]     inspect the DAG
+piw validate <workflow> [--json]  fail closed before a paid run
+piw run <workflow>                execute and stream node evidence
+piw detail <workflow>             inspect the latest run
+piw show <workflow> <step>        print one artifact
+piw stats <workflow>              pass, cache, token, cost, and timing counters
+piw schedule <workflow> ...       add an optional durable Loops schedule
+piw doctor [--json]               verify the installation and integrations
+```
 
-For a cheap model-route and controller smoke, use Luna low with `final-only`,
-zero revisions, and an `artifacts-only` seed. The controller revalidates every
-seeded artifact and reruns the final semantic verdict under Luna; it never
-reuses a verdict produced by another model profile. This is test evidence, not
-judge calibration or promotion evidence.
+Every inspection command supports `--json`. Failed validation and failed runs
+exit non-zero and preserve their artifacts, stderr, event log, and cost ledger.
 
-## Validate
+## Deterministic guarantees
+
+- Dependencies and `when:` routes are evaluated by code, not a model.
+- Each run gets an immutable, isolated copy of its input.
+- Gates are shell checks; exit 0 passes and any other exit fails.
+- Typed JSON output is checked before a downstream route can read it.
+- A route that references an undeclared field fails validation instead of
+  silently skipping a branch.
+- Retries are bounded, timeouts fail inside the retry boundary, and failed
+  attempts remain inspectable.
+- Passing prompt outputs are content-addressed; cache hits skip model and judge
+  calls while rerunning the gate.
+- Every run records artifacts, attempts, tokens, cost, time, and git history.
+
+## Integrations
+
+- **Pi:** the `pi_workflows` native tool can create, inspect, validate, run, and
+  schedule workflows. Its `schema` action exposes the authoring contract.
+- **Agent X:** uses the same installed CLI and runtime; Agent X remains the
+  coding and orchestration harness.
+- **Loops:** adds a graph canvas, live run state, inspection, and scheduling.
+  `steps.yaml` remains source of truth.
+- **Codex and Claude Code:** share the same workflow skill and CLI.
+
+## Develop
 
 ```bash
-./bin/piw doctor
-python3 -m unittest discover -s tests -v
-python3 -m py_compile scripts/*.py
+python3 -m venv .venv
+.venv/bin/python -m pip install 'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19'
+npm ci --ignore-scripts
+npm test
+npm run check
+PI_WORKFLOWS_ROOTS="$PWD/examples" ./bin/piw validate examples/hello/steps.yaml
+PI_WORKFLOWS_ROOTS="$PWD/examples" ./bin/piw run examples/hello/steps.yaml --input Ada
 ```
 
-## Repository policy
+The normal graph runner is intentionally small. The production workflow
+factory, certification, replay, peer-review, and product-planning harnesses are
+advanced opt-in layers documented under [`references/`](references/).
 
-Do not commit generated workflow runs, credentials, Pi authentication state,
-production traces, or customer data. Compiled harnesses and their run artifacts
-belong in the consuming project's `.codex/workflows/` tree.
+## License
+
+[MIT](LICENSE)

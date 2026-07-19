@@ -11,6 +11,7 @@ test("tool arguments preserve explicit workflow inputs and machine output", () =
     ["run", "triage", "--node", "qa", "--input", "case", "--no-cache", "--json"],
   );
   assert.deepEqual(argumentsFor({ action: "doctor", json: true }), ["doctor", "--json"]);
+  assert.deepEqual(argumentsFor({ action: "schema", json: true }), ["schema", "--json"]);
   assert.deepEqual(argumentsFor({ action: "create", name: "Release notes", workers: 2 }), ["create", "Release notes", "--workers", "2"]);
   assert.deepEqual(argumentsFor({ action: "schedule", workflow: "triage", daily: "09:00", stopAfter: 3 }), ["schedule", "triage", "--daily", "09:00", "--stop-after", "3"]);
   assert.deepEqual(argumentsFor({ action: "automation", automationAction: "resume", id: "piw-triage" }), ["automation", "resume", "piw-triage"]);

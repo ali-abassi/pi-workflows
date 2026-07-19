@@ -17,6 +17,42 @@ CLI = ROOT / "scripts" / "piw.py"
 
 
 class ProductCliTests(unittest.TestCase):
+    def test_schema_exposes_node_kinds_and_every_runtime_input(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(CLI), "schema", "--json"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        schema = json.loads(result.stdout)
+        metadata = schema["x-pi-workflows"]
+        self.assertEqual(
+            [node["kind"] for node in metadata["nodeKinds"]],
+            ["command", "llm", "tool", "agent", "qa"],
+        )
+        self.assertEqual(
+            set(metadata["runtimeInputs"]["prompt"]),
+            {"{input}", "{step.ID}", "{prev}", "{run}"},
+        )
+        self.assertEqual(
+            set(metadata["runtimeInputs"]["commandAndGate"]),
+            {"$INPUT", "$PI_WORKFLOWS_INPUT", "$OUT", "$RUN", "$STEP"},
+        )
+
+    def test_validate_rejects_ambiguous_node_kind_before_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            steps = Path(raw) / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "ambiguous",
+                "steps": [{"id": "both", "cmd": "true", "prompt": "do it"}],
+            }), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(CLI), "validate", str(steps), "--json"],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("exactly one of cmd or prompt", result.stdout)
+
     def test_concurrent_runs_keep_inputs_isolated(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -63,6 +99,7 @@ class ProductCliTests(unittest.TestCase):
             self.assertEqual(payload["id"], "triage")
 
             spec = yaml.safe_load((target / "steps.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(spec["version"], 1)
             self.assertEqual(spec["input"]["required"], True)
             self.assertIn("{input}", spec["steps"][0]["prompt"])
 
@@ -88,6 +125,31 @@ class ProductCliTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("requires --input", result.stderr)
+
+    def test_run_json_is_one_machine_parseable_document(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            steps = root / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "json-output",
+                "input": {"required": True, "description": "value"},
+                "steps": [{"id": "copy", "cmd": 'cat "$INPUT"', "gate": 'test -s "$OUT"'}],
+            }, sort_keys=False), encoding="utf-8")
+            env = {
+                **os.environ,
+                "PI_WORKFLOWS_ROOTS": raw,
+                "LOOPS_PORT": "1",
+                "PI_WORKFLOWS_STATE_DIR": str(root / "state"),
+            }
+            result = subprocess.run(
+                [sys.executable, str(CLI), "run", str(steps), "--input", "Ada", "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["passed"], 1)
 
 
 if __name__ == "__main__":

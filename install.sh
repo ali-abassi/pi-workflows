@@ -35,6 +35,8 @@ fi
 mkdir -p "$(dirname -- "$install_dir")"
 mv "$stage/product" "$install_dir"
 
+"$install_dir/bin/piw" schema --json >/dev/null
+
 mkdir -p "$user_bin" "$HOME/.agents/skills" "$HOME/.claude/skills"
 ln -sfn "$install_dir/bin/piw" "$user_bin/piw"
 ln -sfn "$install_dir" "$HOME/.agents/skills/pi-workflows"
@@ -52,3 +54,9 @@ printf 'Pi package: %s\n' "$install_dir"
 printf 'Codex skill: %s\n' "$HOME/.agents/skills/pi-workflows"
 printf 'Claude Code skill: %s\n' "$HOME/.claude/skills/pi-workflows"
 printf 'Run: piw doctor\n'
+case ":$PATH:" in
+  *":$user_bin:"*) ;;
+  *)
+    printf 'PATH note: add %s to PATH, or run %s/piw directly.\n' "$user_bin" "$user_bin" >&2
+    ;;
+esac

@@ -555,9 +555,18 @@ def parse_steps(steps_path: Path) -> dict[str, Any]:
     if not isinstance(spec, dict):
         raise WorkflowParseError("steps.yaml must be a mapping")
 
+    version = spec.get("version", 1)
+    if version != 1:
+        raise WorkflowParseError(f"unsupported workflow version: {version!r} (expected 1)")
+    workers = spec.get("workers", 4)
+    if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
+        raise WorkflowParseError("workers must be an integer from 1 to 16")
+
     raw_steps = spec.get("steps") or []
     if not isinstance(raw_steps, list):
         raise WorkflowParseError("'steps' must be a list")
+    if not raw_steps:
+        raise WorkflowParseError("steps.yaml has no steps")
 
     steps: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -565,6 +574,15 @@ def parse_steps(steps_path: Path) -> dict[str, Any]:
         if not isinstance(entry, dict) or not entry.get("id"):
             raise WorkflowParseError("every step needs an 'id'")
         sid = str(entry["id"])
+        if bool(entry.get("cmd")) == bool(entry.get("prompt")):
+            raise WorkflowParseError(f"step '{sid}' must have exactly one of cmd or prompt")
+        if entry.get("cmd") and entry.get("agent"):
+            raise WorkflowParseError(f"step '{sid}': agent applies to prompt steps only")
+        if "needs" in entry and (
+            not isinstance(entry["needs"], list)
+            or not all(isinstance(value, str) and value for value in entry["needs"])
+        ):
+            raise WorkflowParseError(f"step '{sid}': needs must be a list of earlier step ids")
         if sid in seen:
             raise WorkflowParseError(f"duplicate step id: {sid}")
         seen.add(sid)
@@ -695,7 +713,7 @@ def parse_steps(steps_path: Path) -> dict[str, Any]:
         "cwd": str(steps_path.parent),
         "model": default_model,
         "thinking": default_thinking,
-        "workers": int(spec.get("workers", 4) or 4),
+        "workers": workers,
         "input": spec.get("input") if isinstance(spec.get("input"), dict) else None,
         "has_qa": bool(qa),
         "layout_source": "sidecar" if saved else "auto",

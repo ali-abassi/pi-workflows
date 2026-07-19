@@ -8,7 +8,8 @@ description: "Create or use deterministic Pi workflow graphs for repeatable mult
 The failure this prevents: an agent given N steps skips some, reorders them, or declares done early. The structural fix: **the model never owns control flow** — a runner calls the model once per step, gates decide pass/fail, artifacts chain between steps. Same yaml + same inputs → same path, every run, 1 time or 500.
 
 CLI: `piw`. Runner: `scripts/run_steps.py`. No compilation or certification is
-required for the normal path.
+required for the normal path. Run `piw schema` for the concise node/input
+catalog or `piw schema --json` for the complete machine-readable contract.
 
 ## Stage 1 — Understand the task
 
@@ -29,6 +30,7 @@ One paragraph of these answers is the workflow contract. Then build.
 Write a `steps.yaml` (full example: `templates/idea-to-plan.steps.yaml` — research, GO/NO-GO gate, debate, per-page copy, review→patch→apply quality loop, checklist output):
 
 ```yaml
+version: 1
 workflow: spec-review
 model: openai-codex/gpt-5.6-luna      # cheap default; per-step overrides below
 thinking: low

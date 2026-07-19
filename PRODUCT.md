@@ -1,6 +1,6 @@
 # Pi Workflows product contract
 
-Pi Workflows turns an agent-authored `steps.yaml` graph into repeatable work:
+Pi Workflows turns an agent-authored, versioned `steps.yaml` graph into repeatable work:
 the same declared nodes, dependencies, routes, gates, budgets, and approval
 boundaries execute in the same order while model output remains honestly
 probabilistic.
@@ -16,12 +16,14 @@ probabilistic.
 ## Product surfaces
 
 1. `steps.yaml` — portable authored contract.
-2. `piw` — stable human and machine-readable CLI. Every inspection command has
+2. `schemas/workflow.schema.json` — complete node, field, runtime-input, and
+   failure contract for agents and editors, exposed by `piw schema --json`.
+3. `piw` — stable human and machine-readable CLI. Every inspection command has
    `--json`; failures use non-zero exit codes and actionable errors.
-3. Pi package — a native Pi tool and skill, installable from a local path or Git.
-4. Codex and Claude Code skills — one shared `SKILL.md`, discovered from their
+4. Pi package — a native Pi tool and skill, installable from a local path or Git.
+5. Codex and Claude Code skills — one shared `SKILL.md`, discovered from their
    documented user skill locations.
-5. Loops adapter — beautiful graph/configuration display, live events, run
+6. Loops adapter — beautiful graph/configuration display, live events, run
    inspection, and durable schedules. Loops owns scheduling; Pi Workflows owns
    workflow semantics.
 

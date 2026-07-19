@@ -46,6 +46,7 @@ import control as loopd
 import graph as pygraph
 
 DAEMON = f"http://127.0.0.1:{loopd.DEFAULT_PORT}"
+SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "workflow.schema.json"
 
 # Compact kind labels; the canvas shows icons, the terminal shows four chars.
 KIND_LABEL = {
@@ -174,6 +175,41 @@ def cmd_ls(args) -> int:
     out(f"{'ID'.ljust(width)}  {'NAME'.ljust(18)} STEPS RUNS")
     for identifier, name, steps, runs in rows:
         out(f"{identifier.ljust(width)}  {name[:18].ljust(18)} {steps.rjust(5)} {runs.rjust(4)}")
+    return 0
+
+
+# ------------------------------------------------------------------------ schema
+
+
+def cmd_schema(args) -> int:
+    """Expose the complete authoring contract to humans, agents, and editors."""
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return fail(f"workflow schema unavailable: {error}")
+    if args.json:
+        out(json.dumps(schema, separators=(",", ":")))
+        return 0
+
+    metadata = schema["x-pi-workflows"]
+    out("Pi Workflows v1 · canonical file: steps.yaml")
+    out(f"JSON Schema: {SCHEMA_PATH}")
+    out()
+    out("NODES")
+    for node in metadata["nodeKinds"]:
+        model = "model" if node["modelCall"] else "code"
+        out(f"  {node['kind'].ljust(8)} {model.ljust(5)} · {node['selector']} · {node['purpose']}")
+    out()
+    out("PROMPT INPUTS")
+    for name, meaning in metadata["runtimeInputs"]["prompt"].items():
+        out(f"  {name.ljust(12)} {meaning}")
+    out()
+    out("COMMAND + GATE INPUTS")
+    for name, meaning in metadata["runtimeInputs"]["commandAndGate"].items():
+        out(f"  {name.ljust(20)} {meaning}")
+    out()
+    out("Judge: {out}, {run} · QA: {artifacts}, {run}")
+    out("Full reference: docs/workflow-format.md · machine form: piw schema --json")
     return 0
 
 
@@ -621,7 +657,9 @@ def cmd_run(args) -> int:
     if events_path is None:
         process, events_path = start_direct(workflow, regen, args.no_cache, args.input, args.input_file)
 
-    ok, totals = follow(events_path, quiet=args.quiet, timeout=args.timeout)
+    # Machine output must be one JSON document. Streaming decorative progress
+    # before it made `piw run --json | jq ...` fail even when the run passed.
+    ok, totals = follow(events_path, quiet=args.quiet or args.json, timeout=args.timeout)
 
     if process is not None:
         try:
@@ -1073,6 +1111,7 @@ def cmd_create(args) -> int:
         return fail(f"refusing to overwrite {steps_path}")
     directory.mkdir(parents=True, exist_ok=True)
     spec = {
+        "version": 1,
         "workflow": identifier,
         "model": args.model,
         "thinking": args.thinking,
@@ -1214,6 +1253,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     add("ls", "list workflows", workflow=False)
 
+    add("schema", "show every workflow field, node kind, and runtime input", workflow=False)
+
     add("doctor", "verify the standalone product and optional integrations", workflow=False)
 
     create = add("create", "scaffold a valid input-to-artifact workflow", workflow=False)
@@ -1320,7 +1361,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 COMMANDS = {
-    "ls": cmd_ls, "graph": cmd_graph, "validate": cmd_validate, "run": cmd_run,
+    "ls": cmd_ls, "schema": cmd_schema, "graph": cmd_graph, "validate": cmd_validate, "run": cmd_run,
     "runs": cmd_runs, "show": cmd_show, "stats": cmd_stats, "path": cmd_path,
     "set": cmd_set, "detail": cmd_detail, "batch": cmd_batch, "eval": cmd_eval,
     "reports": cmd_reports, "doctor": cmd_doctor, "create": cmd_create,

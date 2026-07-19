@@ -1,15 +1,18 @@
+import { fileURLToPath } from "node:url";
+
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-const ACTIONS = ["doctor", "list", "create", "graph", "path", "validate", "run", "runs", "detail", "show", "stats", "schedule", "automations", "automation"] as const;
+const ACTIONS = ["doctor", "schema", "list", "create", "graph", "path", "validate", "run", "runs", "detail", "show", "stats", "schedule", "automations", "automation"] as const;
+const PIW = fileURLToPath(new URL("../bin/piw", import.meta.url));
 
 export function argumentsFor(params: Record<string, unknown>): string[] {
   const action = String(params.action ?? "list");
   if (!(ACTIONS as readonly string[]).includes(action)) throw new Error(`unsupported Pi Workflows action: ${action}`);
   const command = action === "list" ? "ls" : action;
   const args = [command];
-  if (!["ls", "doctor", "create", "automations", "automation"].includes(command)) {
+  if (!["ls", "doctor", "schema", "create", "automations", "automation"].includes(command)) {
     const workflow = typeof params.workflow === "string" ? params.workflow.trim() : "";
     if (!workflow) throw new Error(`${action} requires a workflow id or unique name`);
     args.push(workflow);
@@ -101,12 +104,12 @@ export default function piWorkflows(pi: ExtensionAPI) {
         content: [{ type: "text", text: `piw ${args.slice(0, 2).join(" ")}…` }],
         details: { command: "piw", args, state: "running" },
       });
-      const result = await pi.exec("piw", args, { cwd: ctx.cwd, signal, timeout: 3_600_000 });
+      const result = await pi.exec(PIW, args, { cwd: ctx.cwd, signal, timeout: 3_600_000 });
       const output = `${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`.trim();
       if (result.code !== 0) throw new Error(output || `piw exited ${result.code}`);
       return {
         content: [{ type: "text", text: output || "ok" }],
-        details: { command: "piw", args, code: result.code },
+        details: { command: PIW, args, code: result.code },
       };
     },
   });
