@@ -36,7 +36,7 @@ piw run steps.yaml --input-file changes.txt
 piw detail steps.yaml
 ```
 
-## Node kinds
+## Execution runtimes
 
 | Kind | How to declare it | Model | Use it for |
 |---|---|---:|---|
@@ -46,9 +46,14 @@ piw detail steps.yaml
 | Agent | `prompt: ...` + `agent: true` | Yes | A full Pi tool loop with project context |
 | QA | top-level `qa:` | Yes | Independent review after the graph completes |
 
-Each step has exactly one of `cmd` or `prompt`. Use the weakest kind that can
+Each step has exactly one of `cmd` or `prompt`. Use the weakest runtime that can
 finish the work. A `gate` verifies the artifact or effect mechanically; a model
 never decides whether its own gate passed.
+
+Runtime kinds stay small on purpose. Dynamic behavior comes from composable
+fan-out, join, route, gate, retry, judge, QA, cache, and artifact capabilities.
+See [`node-system.md`](node-system.md) for the complete model and first-class
+capabilities under consideration.
 
 `tools:` is a Pi tool-selection boundary, not an operating-system sandbox.
 In particular, allowing `bash` allows arbitrary commands with the current

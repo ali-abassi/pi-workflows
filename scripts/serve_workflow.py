@@ -1,172 +1,335 @@
 #!/usr/bin/env python3
-"""One-file HTML UI for a deterministic workflow: paste input, watch the live
-step log, get the final artifact + cost ledger.
+"""Local, optional graph studio for one Pi Workflow.
 
-Usage:
-  python3 serve_workflow.py steps.yaml --input-file idea.md [--output publish] [--port 8787]
-
---output names the step whose artifact is shown as the result (default: the
-last step). Each Run creates an isolated session dir under ui-sessions/ with
-the workflow yaml copied in and the shared cache/ symlinked (repeat inputs are
-near-free). Stdlib only; single page; no external assets.
+The UI is a view and run surface over the same ``steps.yaml`` and runner used by
+``piw``. It never becomes a second workflow engine or source of truth.
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
-import re
+import secrets
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
+import webbrowser
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
-import yaml
+import graph as workflow_graph
 
-RUNNER = Path(__file__).parent / "run_steps.py"
-SESSIONS: dict[str, dict] = {}
+
+ROOT = Path(__file__).resolve().parent.parent
+RUNNER = ROOT / "scripts" / "run_steps.py"
+UI_ROOT = ROOT / "ui"
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_SESSIONS = 24
+MAX_ACTIVE = 4
+
 CFG: dict = {}
+SESSIONS: dict[str, dict] = {}
+SESSIONS_LOCK = threading.Lock()
 
-PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>{title}</title><style>
-body{{margin:0;background:#0A0A0B;color:#EDEDED;font:15px/1.5 -apple-system,Inter,sans-serif;
-display:grid;grid-template-columns:minmax(320px,1fr) 1.4fr;gap:0;height:100vh}}
-.col{{padding:24px;overflow:auto}} .left{{border-right:1px solid rgba(255,255,255,.08)}}
-h1{{font-size:17px;margin:0 0 2px}} .sub{{color:#A1A1AA;font-size:13px;margin:0 0 16px}}
-textarea{{width:100%;height:40vh;background:#141417;color:#EDEDED;border:1px solid rgba(255,255,255,.12);
-border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,monospace;resize:vertical;box-sizing:border-box}}
-button{{margin-top:12px;background:#5E6AD2;color:#fff;border:0;border-radius:8px;padding:10px 22px;
-font-weight:600;font-size:14px;cursor:pointer}} button:disabled{{opacity:.45;cursor:default}}
-pre{{background:#141417;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:14px;
-font:12px/1.55 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}}
-#log{{max-height:38vh;overflow:auto;color:#A1A1AA}} #out{{color:#EDEDED}}
-.badge{{display:inline-block;font:600 11px/1 ui-monospace,monospace;letter-spacing:.08em;padding:4px 8px;
-border-radius:4px;margin-left:8px}} .run{{background:#3b3b6e}} .ok{{background:#1e5c3a}} .bad{{background:#6e2f2f}}
-table{{border-collapse:collapse;font:12px ui-monospace,monospace;margin-top:8px}}
-td,th{{border:1px solid rgba(255,255,255,.1);padding:4px 10px;text-align:right}} td:first-child{{text-align:left}}
-</style></head><body>
-<div class="col left"><h1>{title}<span id="badge" class="badge" style="display:none"></span></h1>
-<p class="sub">{nsteps} steps &middot; deterministic runner &middot; output: {outstep}</p>
-<textarea id="input" placeholder="Paste the input for {inputfile}..."></textarea><br>
-<button id="go" onclick="run()">Run workflow</button></div>
-<div class="col"><h1>Log</h1><pre id="log">idle</pre><h1>Result</h1><pre id="out">&mdash;</pre><div id="ledger"></div></div>
-<script>
-let sid=null, timer=null;
-function badge(t,c){{const b=document.getElementById('badge');b.textContent=t;b.className='badge '+c;b.style.display='inline-block';}}
-async function run(){{
-  const content=document.getElementById('input').value; if(!content.trim())return;
-  document.getElementById('go').disabled=true; badge('RUNNING','run');
-  document.getElementById('out').textContent='\\u2014'; document.getElementById('ledger').innerHTML='';
-  const r=await fetch('/run',{{method:'POST',body:JSON.stringify({{content}})}}); sid=(await r.json()).session;
-  timer=setInterval(poll,1500);
-}}
-async function poll(){{
-  const s=await (await fetch('/status?session='+sid)).json();
-  document.getElementById('log').textContent=s.log||'starting...';
-  const lg=document.getElementById('log'); lg.scrollTop=lg.scrollHeight;
-  if(s.done){{clearInterval(timer); document.getElementById('go').disabled=false;
-    badge(s.exit===0?'PASS':'FAIL', s.exit===0?'ok':'bad');
-    document.getElementById('out').textContent=s.output||'(no output artifact)';
-    if(s.ledger)document.getElementById('ledger').innerHTML=s.ledger;}}
-}}
-</script></body></html>"""
+
+def _events(path: Path) -> list[dict]:
+    """Read only complete JSONL records; the runner may be writing the tail."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    parsed = []
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(event, dict):
+            parsed.append(event)
+    return parsed
+
+
+def _read(path: Path, limit: int = 64_000) -> str:
+    try:
+        value = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return value if len(value) <= limit else value[:limit] + "\n\n… truncated"
+
+
+def latest_snapshot() -> dict | None:
+    runs_dir = CFG["steps"].parent / "runs"
+    try:
+        candidates = sorted(
+            (path for path in runs_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    for run_dir in candidates:
+        try:
+            detail = workflow_graph.run_detail(CFG["steps"], run_dir)
+        except (OSError, workflow_graph.WorkflowParseError):
+            continue
+        return {
+            "detail": detail,
+            "output": _read(run_dir / f"{CFG['output']}.md"),
+        }
+    return None
+
+
+def _prune_sessions() -> None:
+    """Keep recent evidence available without growing an unbounded process map."""
+    with SESSIONS_LOCK:
+        if len(SESSIONS) <= MAX_SESSIONS:
+            return
+        completed = [key for key, value in SESSIONS.items() if value["proc"].poll() is not None]
+        for key in completed[: max(0, len(SESSIONS) - MAX_SESSIONS)]:
+            SESSIONS.pop(key, None)
 
 
 def start_run(content: str) -> str:
-    sid = uuid.uuid4().hex[:10]
-    work = CFG["root"] / "ui-sessions" / f"{datetime.datetime.now().strftime('%m%d-%H%M%S')}-{sid}"
-    work.mkdir(parents=True)
-    work.joinpath(CFG["yaml_name"]).write_text(CFG["yaml_text"])
-    work.joinpath(CFG["input_file"]).write_text(content)
-    cache = CFG["root"] / "cache"
-    cache.mkdir(exist_ok=True)
-    (work / "cache").symlink_to(cache)
-    proc = subprocess.Popen([sys.executable, str(RUNNER), CFG["yaml_name"]],
-                            cwd=work, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    SESSIONS[sid] = {"work": work, "proc": proc, "lines": []}
+    _prune_sessions()
+    with SESSIONS_LOCK:
+        active = sum(1 for item in SESSIONS.values() if item["proc"].poll() is None)
+        if active >= MAX_ACTIVE:
+            raise RuntimeError(f"{MAX_ACTIVE} runs are already active; wait for one to finish")
 
-    def pump():
+    sid = uuid.uuid4().hex[:12]
+    events_path = CFG["temp"] / f"{sid}.jsonl"
+    events_path.touch()
+    command = [sys.executable, str(RUNNER), str(CFG["steps"]), "--events", str(events_path)]
+    if content:
+        command.extend(["--input", content])
+    proc = subprocess.Popen(
+        command,
+        cwd=CFG["steps"].parent,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    session = {"proc": proc, "events": events_path, "output": [], "detail": None}
+    with SESSIONS_LOCK:
+        SESSIONS[sid] = session
+
+    def pump() -> None:
+        assert proc.stdout is not None
         for line in proc.stdout:
-            SESSIONS[sid]["lines"].append(line)
-        proc.wait()
-    threading.Thread(target=pump, daemon=True).start()
+            session["output"].append(line)
+            if len(session["output"]) > 1000:
+                del session["output"][:250]
+
+    threading.Thread(target=pump, daemon=True, name=f"piw-ui-{sid}").start()
     return sid
 
 
-def status(sid: str) -> dict:
-    s = SESSIONS.get(sid)
-    if not s:
-        return {"done": True, "exit": 1, "log": "unknown session"}
-    done = s["proc"].poll() is not None
-    out = {"done": done, "exit": s["proc"].returncode, "log": "".join(s["lines"])[-20000:]}
-    if done:
-        runs = sorted(s["work"].glob("runs/*/"))
-        if runs:
-            artifact = runs[-1] / f"{CFG['output_step']}.md"
-            out["output"] = artifact.read_text()[-30000:] if artifact.exists() else None
-            ledger_file = runs[-1] / "ledger.json"
-            if ledger_file.exists():
-                rows = json.loads(ledger_file.read_text())
-                cells = "".join(
-                    f"<tr><td>{e['id']}</td><td>{'cache' if e.get('cached') else (e.get('model') or 'cmd').split('/')[-1]}</td>"
-                    f"<td>{e.get('seconds', 0)}s</td><td>{e.get('total', 0)}</td><td>${e.get('cost', 0):.4f}</td></tr>"
-                    for e in rows)
-                total = sum(e.get("cost", 0) for e in rows)
-                out["ledger"] = (f"<h1>Ledger &middot; ${total:.4f}</h1><table><tr><th>step</th><th>model</th>"
-                                 f"<th>time</th><th>tokens</th><th>cost</th></tr>{cells}</table>")
-    return out
+def session_status(sid: str, after: int) -> dict:
+    with SESSIONS_LOCK:
+        session = SESSIONS.get(sid)
+    if not session:
+        raise KeyError("unknown or expired session")
+
+    events = _events(session["events"])
+    done = session["proc"].poll() is not None
+    response = {
+        "events": events[max(0, after):],
+        "event_count": len(events),
+        "done": done,
+        "exit": session["proc"].returncode if done else None,
+    }
+    if not done:
+        return response
+
+    run_start = next((item for item in events if item.get("t") == "run_start"), None)
+    run_dir = Path(run_start["run_dir"]) if run_start and run_start.get("run_dir") else None
+    if run_dir and run_dir.is_dir():
+        if session["detail"] is None:
+            try:
+                session["detail"] = workflow_graph.run_detail(CFG["steps"], run_dir)
+            except (OSError, workflow_graph.WorkflowParseError) as error:
+                session["detail"] = {"error": str(error)}
+        detail = session["detail"]
+        response["detail"] = detail if "error" not in detail else None
+        output_id = CFG["output"]
+        response["output"] = _read(run_dir / f"{output_id}.md")
+        if "error" in detail:
+            response["error"] = detail["error"]
+
+    if session["proc"].returncode and "error" not in response:
+        response["error"] = "".join(session["output"])[-5000:].strip() or "workflow failed"
+    return response
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *a):  # quiet
-        pass
+    server_version = "PiWorkflowsStudio/1"
 
-    def _send(self, body: bytes, ctype: str = "application/json") -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", ctype)
+    def log_message(self, _format: str, *_args) -> None:
+        return
+
+    def _send(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):
-        if self.path.startswith("/status"):
-            sid = re.search(r"session=(\w+)", self.path)
-            self._send(json.dumps(status(sid.group(1) if sid else "")).encode())
-        else:
-            self._send(PAGE.format(**CFG["page"]).encode(), "text/html; charset=utf-8")
+    def _json(self, status: int, value: dict) -> None:
+        self._send(status, json.dumps(value, separators=(",", ":")).encode(), "application/json; charset=utf-8")
 
-    def do_POST(self):
-        if self.path != "/run":
-            self._send(b'{"error":"not found"}')
+    def _asset(self, name: str, content_type: str) -> None:
+        path = UI_ROOT / name
+        if not path.is_file():
+            self._json(HTTPStatus.NOT_FOUND, {"error": "asset not found"})
             return
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        self._send(json.dumps({"session": start_run(body["content"])}).encode())
+        self._send(HTTPStatus.OK, path.read_bytes(), content_type)
+
+    def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+        parsed = urlparse(self.path)
+        if parsed.path == "/":
+            boot = json.dumps({
+                "graph": CFG["graph"],
+                "token": CFG["token"],
+                "default_input": CFG["default_input"],
+                "latest": latest_snapshot(),
+            }, separators=(",", ":")).replace("</", "<\\/")
+            page = (UI_ROOT / "index.html").read_text(encoding="utf-8").replace("__PIW_BOOT__", boot)
+            self._send(HTTPStatus.OK, page.encode(), "text/html; charset=utf-8")
+            return
+        if parsed.path == "/assets/styles.css":
+            self._asset("styles.css", "text/css; charset=utf-8")
+            return
+        if parsed.path == "/assets/app.js":
+            self._asset("app.js", "text/javascript; charset=utf-8")
+            return
+        if parsed.path == "/api/status":
+            query = parse_qs(parsed.query)
+            sid = (query.get("session") or [""])[0]
+            try:
+                after = max(0, int((query.get("after") or ["0"])[0]))
+                self._json(HTTPStatus.OK, session_status(sid, after))
+            except (KeyError, ValueError) as error:
+                self._json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+            return
+        self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+        if urlparse(self.path).path != "/api/run":
+            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        if self.headers.get("X-Piw-Token") != CFG["token"]:
+            self._json(HTTPStatus.FORBIDDEN, {"error": "invalid run token"})
+            return
+        if not self.headers.get("Content-Type", "").lower().startswith("application/json"):
+            self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "Content-Type must be application/json"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_REQUEST_BYTES:
+            self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "run input exceeds 2 MiB"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            content = payload.get("content", "")
+            if not isinstance(content, str):
+                raise ValueError("content must be a string")
+            sid = start_run(content)
+        except (json.JSONDecodeError, ValueError) as error:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        except (OSError, RuntimeError) as error:
+            self._json(HTTPStatus.CONFLICT, {"error": str(error)})
+            return
+        self._json(HTTPStatus.ACCEPTED, {"session": sid})
+
+
+def validate_workflow(steps: Path) -> dict:
+    graph = workflow_graph.parse_steps(steps)
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "piw.py"), "validate", str(steps), "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    try:
+        verdict = json.loads(result.stdout)
+    except ValueError as error:
+        raise RuntimeError(result.stderr.strip() or "workflow validation returned invalid output") from error
+    if result.returncode or not verdict.get("holds"):
+        issue = verdict.get("next") or verdict.get("reason") or "workflow validation failed"
+        raise RuntimeError(issue)
+    return graph
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="HTML UI for a deterministic workflow")
-    ap.add_argument("steps_file", type=Path)
-    ap.add_argument("--input-file", required=True)
-    ap.add_argument("--output", help="step id whose artifact is the result (default: last step)")
-    ap.add_argument("--port", type=int, default=8787)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="Optional local graph studio for one Pi Workflow")
+    parser.add_argument("steps_file", type=Path)
+    parser.add_argument("--input-file", type=Path, help="prefill the immutable run input")
+    parser.add_argument("--output", help="step whose artifact is shown after a run")
+    parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument("--open", action="store_true", help="open the studio in the default browser")
+    args = parser.parse_args()
 
-    spec = yaml.safe_load(args.steps_file.read_text())
-    steps = spec.get("steps") or []
-    output_step = args.output or steps[-1]["id"]
-    if output_step not in {s["id"] for s in steps}:
-        raise SystemExit(f"unknown --output step '{output_step}'")
-    CFG.update(root=args.steps_file.parent.resolve(), yaml_name=args.steps_file.name,
-               yaml_text=args.steps_file.read_text(), input_file=args.input_file,
-               output_step=output_step,
-               page={"title": spec.get("workflow", args.steps_file.stem), "nsteps": len(steps),
-                     "outstep": output_step, "inputfile": args.input_file})
-    print(f"serving {spec.get('workflow')} on http://127.0.0.1:{args.port} · output step: {output_step}")
-    ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+    steps = args.steps_file.expanduser().resolve()
+    if not steps.is_file():
+        parser.error(f"workflow not found: {steps}")
+    try:
+        graph = validate_workflow(steps)
+    except (OSError, RuntimeError, workflow_graph.WorkflowParseError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+
+    output = args.output or next((node["id"] for node in reversed(graph["nodes"]) if not node.get("synthetic")), "")
+    if output not in {node["id"] for node in graph["nodes"] if not node.get("synthetic")}:
+        print(f"error: unknown output step: {output}", file=sys.stderr)
+        return 2
+    default_input = ""
+    if args.input_file:
+        try:
+            default_input = args.input_file.expanduser().read_text(encoding="utf-8")
+        except OSError as error:
+            print(f"error: cannot read input file: {error}", file=sys.stderr)
+            return 2
+
+    temporary = tempfile.TemporaryDirectory(prefix="pi-workflows-ui-")
+    CFG.update({
+        "steps": steps,
+        "graph": graph,
+        "output": output,
+        "default_input": default_input,
+        "token": secrets.token_urlsafe(24),
+        "temp": Path(temporary.name),
+        "temporary": temporary,
+    })
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    print(f"Pi Workflows Studio · {graph['workflow']} · {url}", flush=True)
+    print(f"source of truth: {steps}", flush=True)
+    if args.open:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        for session in list(SESSIONS.values()):
+            if session["proc"].poll() is None:
+                session["proc"].terminate()
+        temporary.cleanup()
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -30,6 +31,10 @@ class ProductCliTests(unittest.TestCase):
             ["command", "llm", "tool", "agent", "qa"],
         )
         self.assertEqual(
+            [item["capability"] for item in metadata["graphCapabilities"]],
+            ["fan-out", "join", "route", "gate", "retry", "judge-loop", "final-qa", "cache", "artifact-capture", "evidence"],
+        )
+        self.assertEqual(
             set(metadata["runtimeInputs"]["prompt"]),
             {"{input}", "{step.ID}", "{prev}", "{run}"},
         )
@@ -52,6 +57,27 @@ class ProductCliTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("exactly one of cmd or prompt", result.stdout)
+
+    def test_validate_enforces_the_published_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            steps = Path(raw) / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "schema-boundary",
+                "steps": [{"id": "build", "cmd": "true", "model": "not-allowed"}],
+                "mystery": True,
+            }, sort_keys=False), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(CLI), "validate", str(steps), "--json"],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            payload = json.loads(result.stdout)
+            schema_clause = next(item for item in payload["clauses"] if item["clause"] == "matches the versioned JSON Schema")
+            self.assertFalse(schema_clause["pass"])
+            messages = " ".join(item["message"] for item in schema_clause["open"])
+            self.assertIn("mystery", messages)
+            self.assertIn("model", messages)
 
     def test_concurrent_runs_keep_inputs_isolated(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -150,6 +176,58 @@ class ProductCliTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["passed"], 1)
+
+    def test_run_resolves_relative_input_file_before_changing_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            workflow = root / "workflow"
+            workflow.mkdir()
+            steps = workflow / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "relative-input",
+                "input": {"required": True, "description": "value"},
+                "steps": [{"id": "copy", "cmd": 'cat "$INPUT"', "gate": 'test -s "$OUT"'}],
+            }, sort_keys=False), encoding="utf-8")
+            input_file = root / "input.txt"
+            input_file.write_text("Ada", encoding="utf-8")
+            env = {
+                **os.environ,
+                "PI_WORKFLOWS_ROOTS": str(root),
+                "LOOPS_PORT": "1",
+                "PI_WORKFLOWS_STATE_DIR": str(root / "state"),
+            }
+            result = subprocess.run(
+                [sys.executable, str(CLI), "run", "workflow/steps.yaml", "--input-file", "input.txt", "--json"],
+                capture_output=True, text=True, cwd=root, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(result.stdout)["ok"])
+
+    def test_run_fails_fast_when_runner_exits_before_emitting_events(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            steps = root / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "missing-required-input",
+                "input": {"required": True, "description": "required value"},
+                "steps": [{"id": "never", "cmd": "true"}],
+            }, sort_keys=False), encoding="utf-8")
+            env = {
+                **os.environ,
+                "PI_WORKFLOWS_ROOTS": raw,
+                "LOOPS_PORT": "1",
+                "PI_WORKFLOWS_STATE_DIR": str(root / "state"),
+            }
+            started = time.monotonic()
+            result = subprocess.run(
+                [sys.executable, str(CLI), "run", str(steps), "--json", "--timeout", "10"],
+                capture_output=True, text=True, env=env, timeout=5, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(json.loads(result.stdout)["failed_ids"], ["<runner-exited>"])
+            self.assertLess(time.monotonic() - started, 4)
 
     def test_final_qa_usage_is_in_the_machine_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

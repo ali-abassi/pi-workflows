@@ -358,6 +358,68 @@
         "purpose": "Independent final review after the graph completes."
       }
     ],
+    "graphCapabilities": [
+      {
+        "capability": "fan-out",
+        "selector": "multiple dependency-ready nodes",
+        "owner": "runner",
+        "purpose": "Run independent work concurrently up to the declared workers limit."
+      },
+      {
+        "capability": "join",
+        "selector": "needs with two or more node ids",
+        "owner": "runner",
+        "purpose": "Wait for every declared upstream node before continuing."
+      },
+      {
+        "capability": "route",
+        "selector": "schema on source plus when and from on branch",
+        "owner": "code",
+        "purpose": "Take or skip a branch by evaluating typed JSON without a model."
+      },
+      {
+        "capability": "gate",
+        "selector": "gate",
+        "owner": "code",
+        "purpose": "Mechanically accept or reject one node attempt by exit code."
+      },
+      {
+        "capability": "retry",
+        "selector": "retries and timeout",
+        "owner": "runner",
+        "purpose": "Bound recovery attempts and wall-clock time."
+      },
+      {
+        "capability": "judge-loop",
+        "selector": "judge",
+        "owner": "runner",
+        "purpose": "Iterate a candidate against a separate scored review while a gate remains authoritative."
+      },
+      {
+        "capability": "final-qa",
+        "selector": "top-level qa",
+        "owner": "runner",
+        "purpose": "Review the completed graph and fail the run on a structured negative verdict."
+      },
+      {
+        "capability": "cache",
+        "selector": "passing prompt node",
+        "owner": "runner",
+        "purpose": "Reuse a content-addressed artifact while rerunning its mechanical gate."
+      },
+      {
+        "capability": "artifact-capture",
+        "selector": "produces and preview",
+        "owner": "runner",
+        "purpose": "Preserve declared files and visual outputs with each run."
+      },
+      {
+        "capability": "evidence",
+        "selector": "every run",
+        "owner": "runner",
+        "purpose": "Record events, attempts, outputs, stderr, tokens, cost, time, and Git history."
+      }
+    ],
     "runtimeInputs": {
       "prompt": {
         "{input}": "Immutable run input, delimited and labelled as untrusted data.",

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">Pi Workflows</title>
+  <desc id="desc">Deterministic workflow graphs for Pi and agent harnesses.</desc>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#2b2a27" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="520" rx="24" fill="#11110f"/>
+  <rect width="1280" height="520" rx="24" fill="url(#grid)" opacity=".55"/>
+
+  <g transform="translate(50 40) scale(.24)">
+    <path fill="#f4f1e9" fill-rule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"/>
+    <path fill="#f4f1e9" d="M517.36 400H634.72V634.72H517.36Z"/>
+  </g>
+  <text x="210" y="175" fill="#f4f1e9" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="600" letter-spacing="-4">workflows</text>
+  <text x="76" y="265" fill="#aaa79f" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22">DETERMINISTIC GRAPHS · PROBABILISTIC WORK</text>
+  <text x="76" y="350" fill="#d7d3c9" font-family="Arial, Helvetica, sans-serif" font-size="26">Build, test, inspect, evaluate, and optimize agent workflows.</text>
+  <text x="76" y="386" fill="#d7d3c9" font-family="Arial, Helvetica, sans-serif" font-size="26">Code owns control flow. Every run leaves evidence.</text>
+
+  <g transform="translate(850 82)">
+    <path d="M66 56H206V156H326M206 156V286" fill="none" stroke="#66635d" stroke-width="3"/>
+    <path d="M206 156H326" fill="none" stroke="#ff5a1f" stroke-width="3" stroke-dasharray="8 7"/>
+    <g fill="#1c1c19" stroke="#77736c" stroke-width="2">
+      <rect x="0" y="18" width="132" height="76" rx="8"/>
+      <rect x="140" y="118" width="132" height="76" rx="8"/>
+      <rect x="272" y="18" width="132" height="76" rx="8"/>
+      <rect x="272" y="248" width="132" height="76" rx="8"/>
+    </g>
+    <rect x="272" y="118" width="132" height="76" rx="8" fill="#ff5a1f"/>
+    <g fill="#f4f1e9" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">
+      <text x="18" y="51">CLASSIFY</text><text x="18" y="74" fill="#aaa79f" font-size="11">typed JSON</text>
+      <text x="158" y="151">ROUTE</text><text x="158" y="174" fill="#aaa79f" font-size="11">code-owned</text>
+      <text x="290" y="51">RESEARCH</text><text x="290" y="74" fill="#aaa79f" font-size="11">tool node</text>
+      <text x="290" y="151" fill="#11110f">BUILD</text><text x="290" y="174" fill="#4a1c0b" font-size="11">agent loop</text>
+      <text x="290" y="281">VERIFY</text><text x="290" y="304" fill="#aaa79f" font-size="11">gate + QA</text>
+    </g>
+  </g>
+</svg>

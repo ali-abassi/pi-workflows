@@ -200,6 +200,10 @@ def cmd_schema(args) -> int:
         model = "model" if node["modelCall"] else "code"
         out(f"  {node['kind'].ljust(8)} {model.ljust(5)} · {node['selector']} · {node['purpose']}")
     out()
+    out("GRAPH CAPABILITIES")
+    for item in metadata["graphCapabilities"]:
+        out(f"  {item['capability'].ljust(16)} {item['owner'].ljust(6)} · {item['selector']} · {item['purpose']}")
+    out()
     out("PROMPT INPUTS")
     for name, meaning in metadata["runtimeInputs"]["prompt"].items():
         out(f"  {name.ljust(12)} {meaning}")
@@ -327,6 +331,36 @@ def cmd_validate(args) -> int:
     ])
 
     raw_spec = yaml.safe_load(Path(workflow["path"]).read_text(encoding="utf-8")) or {}
+
+    # The JSON Schema is the public authoring contract. Semantic graph checks
+    # below cannot substitute for rejecting unknown fields, illegal field
+    # combinations, or wrong boundary types before a paid run.
+    try:
+        from jsonschema import Draft202012Validator
+        contract = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        schema_errors = sorted(
+            Draft202012Validator(contract).iter_errors(raw_spec),
+            key=lambda error: [str(part) for part in error.absolute_path],
+        )
+    except (ImportError, OSError, ValueError) as error:
+        return fail(f"workflow schema validator unavailable: {error} (run ./install.sh)")
+
+    schema_findings = []
+    for error in schema_errors[:20]:
+        location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+        schema_findings.append(finding(
+            str(error.absolute_path[1]) if len(error.absolute_path) > 1 and error.absolute_path[0] == "steps" else None,
+            f"{location}: {error.message}",
+            f"make `{location}` match `piw schema --json` in {workflow['path']}",
+        ))
+    if len(schema_errors) > 20:
+        schema_findings.append(finding(
+            None,
+            f"{len(schema_errors) - 20} additional schema violations omitted",
+            f"fix the first schema violations in {workflow['path']}",
+        ))
+    clause("matches the versioned JSON Schema", schema_findings)
+
     uses_input = any("{input}" in str(node.get("body") or "") for node in real)
     input_contract = raw_spec.get("input")
     input_findings: list[dict[str, Any]] = []
@@ -564,7 +598,12 @@ def start_direct(
     return process, events
 
 
-def follow(events_path: Path, quiet: bool, timeout: float) -> tuple[bool, dict[str, Any]]:
+def follow(
+    events_path: Path,
+    quiet: bool,
+    timeout: float,
+    process: subprocess.Popen | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """Tail the JSONL event stream, printing one line per finished step."""
     offset = 0
     started: dict[str, float] = {}
@@ -635,6 +674,8 @@ def follow(events_path: Path, quiet: bool, timeout: float) -> tuple[bool, dict[s
                     out(f"  {sid.ljust(width)} skip   {event.get('reason', '')}")
             elif kind == "run_end":
                 return bool(event.get("ok")), {**totals, "run_dir": run_dir, "failed_ids": event.get("failed") or []}
+        if process is not None and process.poll() is not None:
+            return False, {**totals, "run_dir": run_dir, "failed_ids": ["<runner-exited>"]}
         time.sleep(0.2)
 
     return False, {**totals, "run_dir": run_dir, "failed_ids": ["<timeout>"]}
@@ -650,16 +691,22 @@ def cmd_run(args) -> int:
 
     if args.input is not None and args.input_file:
         return fail("choose --input or --input-file, not both")
+    input_file = None
+    if args.input_file:
+        candidate = Path(args.input_file).expanduser().resolve()
+        if not candidate.is_file():
+            return fail(f"input file not found: {candidate}")
+        input_file = str(candidate)
     process = None
     events_path = start_via_daemon(
-        workflow, regen, args.no_cache, args.input, args.input_file,
+        workflow, regen, args.no_cache, args.input, input_file,
     ) if daemon_up() else None
     if events_path is None:
-        process, events_path = start_direct(workflow, regen, args.no_cache, args.input, args.input_file)
+        process, events_path = start_direct(workflow, regen, args.no_cache, args.input, input_file)
 
     # Machine output must be one JSON document. Streaming decorative progress
     # before it made `piw run --json | jq ...` fail even when the run passed.
-    ok, totals = follow(events_path, quiet=args.quiet or args.json, timeout=args.timeout)
+    ok, totals = follow(events_path, quiet=args.quiet or args.json, timeout=args.timeout, process=process)
 
     if process is not None:
         try:
@@ -1038,9 +1085,13 @@ def cmd_doctor(args) -> int:
 
     check("python", sys.version_info >= (3, 11), sys.version.split()[0])
     try:
+        import jsonschema  # type: ignore[import-not-found]  # noqa: F401
         import ruamel.yaml  # type: ignore[import-not-found]  # noqa: F401
         dependencies = True
-        dependency_detail = f"PyYAML {getattr(yaml, '__version__', '?')} · ruamel.yaml available"
+        dependency_detail = (
+            f"PyYAML {getattr(yaml, '__version__', '?')} · ruamel.yaml available · "
+            "jsonschema available"
+        )
     except ImportError as error:
         dependencies = False
         dependency_detail = str(error)
@@ -1241,6 +1292,26 @@ def cmd_schedule(args) -> int:
     return 0
 
 
+def cmd_ui(args) -> int:
+    """Open the optional local graph studio over the canonical workflow file."""
+    if args.json:
+        return fail("ui is an interactive browser surface and does not support --json")
+    workflow = need(args.workflow)
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve().parent / "serve_workflow.py"),
+        workflow["path"],
+        "--port", str(args.port),
+    ]
+    if args.input_file:
+        command.extend(["--input-file", str(Path(args.input_file).expanduser().resolve())])
+    if args.output:
+        command.extend(["--output", args.output])
+    if not args.no_open:
+        command.append("--open")
+    return subprocess.run(command, cwd=workflow["cwd"], check=False).returncode
+
+
 def cmd_automations(args) -> int:
     result = _run_loops(["list"])
     if result.returncode != 0:
@@ -1309,6 +1380,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_input.add_argument("--input-file", help="immutable file input for this run")
     run.add_argument("-q", "--quiet", action="store_true", help="summary line only")
     run.add_argument("--timeout", type=float, default=3600, help="seconds to follow the run (default 3600)")
+
+    ui = add("ui", "open the optional local graph studio")
+    ui.add_argument("--input-file", help="prefill the immutable run input")
+    ui.add_argument("--output", help="step whose artifact is shown after a run")
+    ui.add_argument("--port", type=int, default=8787)
+    ui.add_argument("--no-open", action="store_true", help="serve without opening a browser")
 
     runs = add("runs", "list past runs")
     runs.add_argument("-n", "--limit", type=int, default=20)
@@ -1393,6 +1470,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMANDS = {
     "ls": cmd_ls, "schema": cmd_schema, "graph": cmd_graph, "validate": cmd_validate, "run": cmd_run,
+    "ui": cmd_ui,
     "runs": cmd_runs, "show": cmd_show, "stats": cmd_stats, "path": cmd_path,
     "set": cmd_set, "detail": cmd_detail, "batch": cmd_batch, "eval": cmd_eval,
     "reports": cmd_reports, "doctor": cmd_doctor, "create": cmd_create,

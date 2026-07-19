@@ -1,12 +1,73 @@
+<p align="center">
+  <img src="docs/assets/pi-workflows-hero.svg" alt="Pi Workflows — deterministic graphs, probabilistic work" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ali-abassi/pi-workflows/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ali-abassi/pi-workflows/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/ali-abassi/pi-workflows/releases"><img alt="release" src="https://img.shields.io/github/v/release/ali-abassi/pi-workflows"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-11110f"></a>
+</p>
+
 # Pi Workflows
 
-Deterministic workflow graphs for [Pi](https://github.com/earendil-works/pi).
-Write a small `steps.yaml`; Pi Workflows owns ordering, parallelism, gates,
-routes, retries, evidence, and cost. Models produce or judge artifacts, but code
-decides what runs and whether it passed.
+**The deterministic workflow graph for [Pi](https://github.com/earendil-works/pi), Codex, Claude Code, and other agent harnesses.**
 
-Pi Workflows is an independent open-source product. Agent X and Loops integrate
-with it, but neither is required and neither owns a second workflow engine.
+Write a readable `steps.yaml`; Pi Workflows owns ordering, parallelism, typed
+routes, gates, retries, evidence, and cost. Models produce or review artifacts,
+but code decides what runs and whether it passed.
+
+An agent can create a workflow, validate it before spending tokens, run the
+whole graph or one action, test it across a corpus, compare models, inspect
+every attempt, and find the next cost or latency hotspot. The result is
+repeatable agent work without pretending model output itself is deterministic.
+
+> Pi Workflows is an independent community project. It uses Pi's public package,
+> skill, JSON-mode, and model interfaces; it is not an official Pi project.
+
+## What it gives you
+
+- **Deterministic orchestration.** Dependencies, concurrency, routes, retries,
+  timeouts, and stop conditions are code-owned.
+- **Configurable agent steps.** Pin the model, reasoning, system prompt, tool
+  allowlist, output contract, gate, judge, artifacts, and retry boundary per node.
+- **Proof, not vibes.** Every run preserves events, resolved input, outputs,
+  rejected attempts, stderr, tokens, cost, time, cache state, and Git history.
+- **Built-in evaluation.** Run corpora, compare models while holding judges
+  fixed, inspect regressions, and optimize the most expensive nodes first.
+- **Portable by default.** The CLI and YAML format work without Agent X or
+  Loops. Pi, Codex, and Claude Code discover the same installed skill.
+
+```mermaid
+flowchart LR
+  A["Agent authors steps.yaml"] --> V["Validate graph + contracts"]
+  V -->|pass| R["Run deterministic DAG"]
+  V -->|fail| A
+  R --> G["Mechanical gates"]
+  G -->|retry within budget| R
+  G --> E["Evidence ledger"]
+  E --> O["Evaluate + optimize"]
+  O --> A
+```
+
+## Studio UI
+
+The optional local Studio is a graph runner and flight recorder over the same
+canonical `steps.yaml`. It does not introduce a second engine or hidden graph
+format.
+
+```bash
+piw ui examples/workflows/11-parallel-analysis-qa/steps.yaml \
+  --input-file examples/workflows/11-parallel-analysis-qa/input.txt
+```
+
+<p align="center">
+  <img src="docs/assets/pi-workflows-studio.png" alt="Pi Workflows Studio showing a parallel analysis graph, node inspector, and flight recorder" width="100%">
+</p>
+
+Click a node to inspect its runtime contract. Start a run to watch nodes move
+through running, cached, passed, failed, or skipped states. The result view shows
+the final artifact and identifies the highest-cost node as the first optimization
+target.
 
 ## Install
 
@@ -27,11 +88,11 @@ for Codex and Claude Code. Set `PI_WORKFLOWS_HOME` or
 Pi packages execute code with your user permissions. Review third-party
 workflows before running them; see [`SECURITY.md`](SECURITY.md).
 
-## The format
+## Your first graph
 
-YAML is the human-first source of truth. The format is versioned, comments are
-allowed, and multiline prompts remain readable. A JSON Schema provides editor
-completion and a complete machine contract.
+YAML is the human-first source of truth. It is versioned, comments stay intact,
+and multiline prompts remain readable. JSON Schema provides editor completion
+and an authoritative machine contract.
 
 ```yaml
 version: 1
@@ -58,53 +119,126 @@ steps:
 
 ```bash
 piw validate steps.yaml
+piw graph steps.yaml
 piw run steps.yaml --input-file changes.txt
 piw detail steps.yaml
+piw stats steps.yaml
 ```
 
-See [`docs/workflow-format.md`](docs/workflow-format.md) for dependencies,
-typed output, deterministic branching, gates, judges, QA, and every available
-runtime input.
+```mermaid
+flowchart LR
+  I(["immutable input"]) --> D["draft · LLM"]
+  D -->|"gate passes"| F["final · command"]
+  D -.->|"bounded retry"| D
+  F --> E[("run evidence")]
+```
+
+## Node system
+
+Pi Workflows has four execution runtimes and one final review boundary. Use the
+weakest runtime that can finish the step.
+
+| Runtime | Declaration | Model call | Best for |
+|---|---|---:|---|
+| Command | `cmd: ...` | No | Scripts, APIs, transforms, deterministic checks |
+| LLM | `prompt: ...` | Yes | One isolated completion with no tools |
+| Tool | `prompt:` + `tools:` | Yes | One completion with an explicit Pi tool allowlist |
+| Agent | `prompt:` + `agent: true` | Yes | A full Pi agent loop with project context |
+| Final QA | top-level `qa:` | Yes | Independent review after the graph completes |
+
+The dynamic behavior comes from composable graph capabilities, not a long list
+of cosmetically different nodes:
+
+| Capability | Declaration | Authority |
+|---|---|---|
+| Parallel fan-out | dependency-ready roots + `workers` | runner |
+| Join | `needs: [a, b]` | runner |
+| Typed route | source `schema:` + branch `when:` / `from:` | code |
+| Mechanical verification | `gate:` | code |
+| Bounded recovery | `retries:` + `timeout:` | runner |
+| Semantic improvement | `judge:` | model advises; gate decides |
+| Final review | top-level `qa:` | structured verdict |
+| Cost avoidance | content-addressed prompt cache | runner |
+| Artifact history | `produces:` + `preview:` | runner |
+
+Agents can inspect every field, runtime input, and capability without guessing:
+
+```bash
+piw schema          # concise catalog
+piw schema --json   # authoritative JSON Schema + capability metadata
+```
+
+See [`docs/workflow-format.md`](docs/workflow-format.md) for the complete format
+and [`docs/node-system.md`](docs/node-system.md) for current boundaries and the
+roadmap for human checkpoints, subworkflows, and dynamic map nodes.
+
+## Branches stay deterministic
+
+```yaml
+  - id: classify
+    prompt: 'Return JSON only: {"kind":"bug"|"feature"}'
+    schema:
+      kind:
+        type: string
+        enum: [bug, feature]
+    gate: python3 -c "import json; json.load(open('$OUT'))"
+
+  - id: fix_bug
+    needs: [classify]
+    from: classify
+    when: {op: equals, path: /kind, value: bug}
+    agent: true
+    prompt: Fix the reported bug and run the relevant tests.
+    gate: npm test
+```
+
+```mermaid
+flowchart LR
+  C["classify · typed LLM"] --> R{"kind == bug?"}
+  R -->|yes| B["fix_bug · agent"]
+  R -->|no| S["skip fix_bug"]
+  B --> T["npm test · gate"]
+```
+
+Validation fails when a route reads a field its source does not declare, so a
+valid-but-wrong model response cannot silently send work down the wrong path.
+
+## Test, evaluate, optimize
+
+```bash
+# Run one action fresh; upstream artifacts may come from cache
+piw run steps.yaml --node draft
+
+# Run the same graph across a corpus
+piw batch steps.yaml --inputs evals.jsonl --input-file input.txt
+
+# Compare models while holding the workflow and judges fixed
+piw eval steps.yaml --inputs evals.jsonl --input-file input.txt \
+  --models openai-codex/gpt-5.6-luna,openai-codex/gpt-5.6-terra
+
+# Inspect pass rate, cache hits, tokens, cost, and latency by node
+piw stats steps.yaml
+```
+
+Passing prompt outputs are content-addressed. Cache hits skip model and judge
+calls but rerun the mechanical gate, keeping reuse cheap without trusting stale
+artifacts blindly.
 
 ## Examples
 
-The [`examples/`](examples/) catalog contains 12 runnable workflows ordered from
-starter to complex. Together they cover sequential and parallel execution,
-retries, typed output, deterministic branches, least-privilege tools, full
-agents, judge loops, QA, caching, logs, ledgers, and optimization hotspots.
+The [`examples/`](examples/) catalog contains 12 runnable workflows, from two
+shell steps to parallel agents, typed routing, tool allowlists, bounded judge
+loops, final QA, caching, and cost analysis.
 
 ```bash
 python3 scripts/run_example_suite.py --validate-only  # free contract check
 python3 scripts/run_example_suite.py                  # live Luna-medium suite
 ```
 
-The live suite keeps evidence under the gitignored `examples/.artifacts/`
-directory and produces a report linking every run log and ledger. The accepted
-measurements are in
-[`docs/example-certification.md`](docs/example-certification.md).
-
-## Nodes and inputs
-
-The format has five legible node kinds:
-
-| Node | Declaration | What it does |
-|---|---|---|
-| Command | `cmd: ...` | Runs deterministic shell or program logic |
-| LLM | `prompt: ...` | Runs one isolated Pi completion |
-| Tool | `prompt:` + `tools:` | Runs one completion with an explicit tool allowlist |
-| Agent | `prompt:` + `agent: true` | Runs a full Pi agent loop with project context |
-| QA | top-level `qa:` | Independently reviews the completed graph |
-
-Agents never need to guess the contract:
-
-```bash
-piw schema          # concise human/agent catalog
-piw schema --json   # authoritative JSON Schema + node and runtime-input metadata
-```
-
-Prompt nodes can reference `{input}`, `{step.ID}`, `{prev}`, and `{run}`.
-Command nodes and gates receive `$INPUT`, `$PI_WORKFLOWS_INPUT`, `$OUT`, `$RUN`,
-and `$STEP`. Judge prompts receive `{out}`; final QA receives `{artifacts}`.
+The live suite preserves a report, every log, and every ledger under the
+gitignored `examples/.artifacts/` directory. See
+[`examples/README.md`](examples/README.md) for runnable commands and Mermaid
+graphs of the sequential, parallel, conditional, and judged examples.
 
 ## Core commands
 
@@ -115,6 +249,7 @@ piw ls [--json]                   discover workflows
 piw graph <workflow> [--json]     inspect the DAG
 piw validate <workflow> [--json]  fail closed before a paid run
 piw run <workflow>                execute and stream node evidence
+piw ui <workflow>                 open the optional local graph studio
 piw detail <workflow>             inspect the latest run
 piw show <workflow> <step>        print one artifact
 piw stats <workflow>              pass, cache, token, cost, and timing counters
@@ -125,50 +260,33 @@ piw doctor [--json]               verify the installation and integrations
 Every inspection command supports `--json`. Failed validation and failed runs
 exit non-zero and preserve their artifacts, stderr, event log, and cost ledger.
 
-## Deterministic guarantees
-
-- Dependencies and `when:` routes are evaluated by code, not a model.
-- Each run gets an immutable, isolated copy of its input.
-- Gates are shell checks; exit 0 passes and any other exit fails.
-- Typed JSON output is checked before a downstream route can read it.
-- A route that references an undeclared field fails validation instead of
-  silently skipping a branch.
-- Retries are bounded, timeouts fail inside the retry boundary, and failed
-  attempts remain inspectable.
-- Passing prompt outputs are content-addressed; cache hits skip model and judge
-  calls while rerunning the gate.
-- Every run records artifacts, attempts, tokens, cost, time, and git history.
-
 ## Integrations
 
 - **Pi:** the `pi_workflows` native tool can create, inspect, validate, run, and
   schedule workflows. Its `schema` action exposes the authoring contract.
-- **Agent X:** uses the same installed CLI and runtime; Agent X remains the
+- **Agent X:** invokes the same installed CLI and runtime; Agent X remains the
   coding and orchestration harness.
-- **Loops:** adds a graph canvas, live run state, inspection, and scheduling.
-  `steps.yaml` remains source of truth.
-- **Codex and Claude Code:** share the same workflow skill and CLI.
+- **Loops:** adds the durable schedule and shared graph canvas. `steps.yaml`
+  remains source of truth.
+- **Codex and Claude Code:** discover the same workflow skill and CLI, so either
+  agent can author, test, run, inspect, and improve a graph.
 
 ## Develop
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install 'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19'
+.venv/bin/python -m pip install 'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19' 'jsonschema>=4.23,<5'
 npm ci --ignore-scripts
 npm test
 npm run check
 npm run test:examples
-PI_WORKFLOWS_ROOTS="$PWD/examples/workflows" ./bin/piw validate examples/workflows/01-hello-command/steps.yaml
-PI_WORKFLOWS_ROOTS="$PWD/examples/workflows" ./bin/piw run examples/workflows/01-hello-command/steps.yaml --input Ada
 ```
 
-The normal graph runner is intentionally small. The production workflow
-factory, certification, replay, peer-review, and product-planning harnesses are
-advanced opt-in layers documented under [`references/`](references/).
+The core runner is intentionally small. The workflow factory, certification,
+replay, peer-review, and product-planning harnesses are advanced opt-in layers
+under [`references/`](references/).
 
 ## License
 
-[MIT](LICENSE)
-
-Contributions are welcome; see [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
-[`CHANGELOG.md`](CHANGELOG.md).
+[MIT](LICENSE) · Contributions are welcome; see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CHANGELOG.md`](CHANGELOG.md).

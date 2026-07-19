@@ -1,6 +1,6 @@
 {
   "name": "pi-workflows",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Deterministic DAG workflows for Pi, Agent X, Codex, and Claude Code",
   "author": "Ali Abassi",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "piw": "./bin/piw"
   },
   "pi": {
+    "image": "./docs/assets/pi-workflows-studio.png",
     "extensions": [
       "./extensions/pi-workflows.ts"
     ],

@@ -69,6 +69,15 @@ def command(args: list[str], env: dict[str, str], cwd: Path) -> subprocess.Compl
     return subprocess.run(args, cwd=cwd, env=env, text=True, capture_output=True, timeout=3_600, check=False)
 
 
+def copy_case(source: Path, target: Path) -> None:
+    """Copy authored fixtures only; local run evidence is never suite input."""
+    shutil.copytree(
+        source,
+        target,
+        ignore=shutil.ignore_patterns("runs", "cache", ".artifacts", "__pycache__"),
+    )
+
+
 def validate_case(case: dict[str, Any], workspace: Path, env: dict[str, str], model: str, thinking: str) -> dict[str, Any]:
     case_id = case["id"]
     source = WORKFLOWS / case_id
@@ -80,7 +89,7 @@ def validate_case(case: dict[str, Any], workspace: Path, env: dict[str, str], mo
     assert_live_model(spec, model, thinking, case_id)
 
     target = workspace / case_id
-    shutil.copytree(source, target)
+    copy_case(source, target)
     result = command([str(PIW), "validate", str(target / "steps.yaml"), "--json"], env, target)
     try:
         verdict = json.loads(result.stdout)

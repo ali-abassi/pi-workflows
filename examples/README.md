@@ -22,6 +22,62 @@ cache evidence, and optimization analysis. Every directory contains a complete
 | [`11-parallel-analysis-qa`](workflows/11-parallel-analysis-qa/) | Complex | Parallel model nodes, fan-in, and final QA |
 | [`12-cache-optimization`](workflows/12-cache-optimization/) | Complex | Typed diagnosis, repeated run, cache and hotspot evidence |
 
+## Graph gallery
+
+### 02 · Sequential pipeline
+
+```mermaid
+flowchart LR
+  I([input]) --> N["normalize · command"]
+  N --> S["summarize · command"]
+  S --> P["publish · command"]
+```
+
+### 03 · Parallel fan-out and join
+
+```mermaid
+flowchart LR
+  I([input]) --> A["alpha · async root"]
+  I --> B["beta · async root"]
+  I --> C["gamma · async root"]
+  A --> M["merge · deterministic join"]
+  B --> M
+  C --> M
+```
+
+### 07 · Typed conditional route
+
+```mermaid
+flowchart LR
+  C["classify · typed LLM"] --> R{"kind == bug?"}
+  R -->|yes| B["bug branch"]
+  R -->|no| F["feature branch"]
+  B --> P["publish"]
+  F --> P
+```
+
+### 10 · Bounded judge loop
+
+```mermaid
+flowchart LR
+  D["draft checklist"] --> G{"mechanical gate"}
+  G -->|fail| D
+  G -->|pass| J{"judge ≥ target?"}
+  J -->|revise within max_iters| D
+  J -->|pass| A[(accepted artifact)]
+```
+
+### 11 · Parallel model analysis with final QA
+
+```mermaid
+flowchart LR
+  I([proposal]) --> R["risks · LLM"]
+  I --> O["opportunities · LLM"]
+  R --> A["assemble · command"]
+  O --> A
+  A --> Q["final QA"]
+```
+
 All model-backed example nodes—including judges and QA—are pinned to
 `openai-codex/gpt-5.6-luna` at `medium` reasoning for the public live suite.
 That is a cost-conscious demonstration route, not a claim that same-model QA is

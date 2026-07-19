@@ -2,6 +2,26 @@
 
 All notable changes to Pi Workflows are documented here.
 
+## 0.2.0 — 2026-07-19
+
+- Added the optional `piw ui` Studio: canonical graph rendering, exact node
+  contracts, immutable input, live run states, evidence, artifacts, and cost
+  hotspot inspection with no second workflow engine.
+- Added the Pi-symbol-plus-workflows identity, product screenshot, Mermaid graph
+  gallery, stronger positioning, and a clearer community-project boundary.
+- Exposed ten composable graph capabilities in `piw schema --json` and documented
+  the four execution runtimes plus honest next-node boundaries.
+- Hardened the local UI with startup validation, localhost-only serving, a run
+  token, CSP, bounded request/session state, and the same fail-closed runner.
+- Made `piw validate` enforce the versioned JSON Schema before execution, so
+  unknown fields, wrong types, and illegal node-field combinations fail closed.
+- Fixed relative `--input-file` paths and made the CLI fail fast when a runner
+  exits before emitting a terminal event instead of waiting until timeout.
+- Restored the latest run automatically in Studio and added its screenshot to
+  Pi package gallery metadata.
+- Kept clean installs and example certification isolated from nested run/cache
+  state, including non-copyable Git fsmonitor sockets from prior evidence runs.
+
 ## 0.1.3 — 2026-07-19
 
 - Corrected the public determinism claim: graph transitions are mechanical for

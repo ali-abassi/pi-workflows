@@ -18,13 +18,13 @@ trap cleanup EXIT HUP INT TERM
 mkdir -p "$stage/product"
 (cd "$source_dir" && tar \
   --exclude='./.git' --exclude='./.venv' --exclude='./.pytest_cache' \
-  --exclude='./__pycache__' --exclude='./node_modules' --exclude='./cache' --exclude='./runs' \
+  --exclude='./__pycache__' --exclude='./node_modules' --exclude='*/cache' --exclude='*/runs' \
   --exclude='./outputs' --exclude='./state' --exclude='./examples/.artifacts' \
   -cf - .) | (cd "$stage/product" && tar -xf -)
 
 "$python_bin" -m venv "$stage/product/.venv"
 "$stage/product/.venv/bin/python" -m pip install --quiet --disable-pip-version-check \
-  'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19'
+  'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19' 'jsonschema>=4.23,<5'
 "$stage/product/.venv/bin/python" -m py_compile "$stage/product"/scripts/*.py
 
 if [ -e "$install_dir" ]; then

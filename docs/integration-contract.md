@@ -51,7 +51,8 @@ direct run when Loops is absent or resolves a different workflow path.
   and startup refresh disabled. Every non-empty JSONL line must parse, the
   requested provider/model must match, and `agent_settled` must follow the final
   successful assistant message.
-- Python: 3.11 or newer, with PyYAML 6.x and ruamel.yaml 0.18.x.
+- Python: 3.11 or newer, with PyYAML 6.x, ruamel.yaml 0.18.x, and
+  jsonschema 4.x for the public workflow contract boundary.
 - Workflow YAML is the cross-agent API. CLI JSON is the automation API.
 
 ## Primary Pi sources
