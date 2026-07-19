@@ -194,6 +194,9 @@ class ProductCliTests(unittest.TestCase):
             self.assertEqual(qa["total"], 7)
             self.assertEqual(qa["cost"], 0.001)
             self.assertTrue(qa["passed"])
+            git_config = (ledger_path.parent / ".git" / "config").read_text(encoding="utf-8")
+            self.assertIn("auto = 0", git_config)
+            self.assertIn("auto = false", git_config)
             pi_args = args_path.read_text(encoding="utf-8").splitlines()
             for flag in ("--no-session", "--no-approve", "--offline", "--no-extensions", "--no-skills"):
                 self.assertIn(flag, pi_args)

@@ -792,6 +792,11 @@ def git_commit(run_dir: Path, message: str) -> None:
             git("init", "-q")
             git("config", "user.email", "runner@local")
             git("config", "user.name", "run_steps")
+            # Git may otherwise spawn background auto-maintenance after commit.
+            # A caller can legitimately delete a completed run immediately;
+            # background pack writes race that cleanup on Linux/Python 3.13.
+            git("config", "gc.auto", "0")
+            git("config", "maintenance.auto", "false")
         git("add", "-A")
         git("commit", "-q", "-m", message, check=False)  # empty commit -> nonzero, fine
     except (OSError, subprocess.SubprocessError):
