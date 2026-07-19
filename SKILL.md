@@ -10,6 +10,8 @@ The failure this prevents: an agent given N steps skips some, reorders them, or 
 CLI: `piw`. Runner: `scripts/run_steps.py`. No compilation or certification is
 required for the normal path. Run `piw schema` for the concise node/input
 catalog or `piw schema --json` for the complete machine-readable contract.
+Before rebuilding a common graph fragment, run `piw actions`; templates expand
+into ordinary inspectable nodes with `piw create --action` or `piw add`.
 
 ## Stage 1 — Understand the task
 
@@ -26,6 +28,19 @@ Before writing any yaml, answer these from the user's request (infer where obvio
 One paragraph of these answers is the workflow contract. Then build.
 
 ## Stage 2 — Build the workflow
+
+Start from the action catalog when one contract fits:
+
+```bash
+piw actions --json
+piw create review --action parallel-review
+piw add review/steps.yaml extract-action-items --id extract --needs parallel-review-verdict
+```
+
+The catalog includes typed extraction/classification, parallel review,
+judge/refine, evidence synthesis, repo change + diff verification, canonical
+JSONL, and an exact five-stage item pipeline. Expansion is authoring-time only;
+always inspect and validate the resulting `steps.yaml`.
 
 Write a `steps.yaml` (full example: `templates/idea-to-plan.steps.yaml` — research, GO/NO-GO gate, debate, per-page copy, review→patch→apply quality loop, checklist output):
 
@@ -64,6 +79,9 @@ steps:
       Plan from: {step.extract}
     gate: test -s "$OUT"
     retries: 2
+    retry_on: [model_error, gate_failed, schema_failed]
+    retry_delay_seconds: 1
+    retry_backoff: exponential
   - id: copy
     needs: [extract]                   # parallel with plan
     prompt: |
@@ -92,6 +110,7 @@ Mechanics (the load-bearing rules):
 - **Inputs and placeholders:** `piw run x --input ...` or `--input-file ...` creates immutable `input.txt` inside that run. `{input}` inserts it as explicitly untrusted data; command steps receive `$INPUT`. `{step.<id>}` inlines an artifact; `{prev}` is the previous listed step; `{run}` is the run directory.
 - **Gates decide, never the model.** `bash -c` with `$OUT/$RUN/$STEP`; exit 0 advances. Count matches with `grep -oE .. | wc -l` (`grep -c` counts lines). Prefer gates over judges whenever the check fits in a command.
 - **Judge loop:** score threshold + bounded `max_iters`, judge feedback fed into regeneration, failed attempts snapshotted as `<id>.aN.md` (diffable evidence). `keep_best: true` retains the top candidate below target. Best-of-N = unreachable `score` + `keep_best`. Gate is the floor and runs first; judge pass never overrides a failed gate.
+- **Classified retries:** failures are recorded as `command_exit`, `model_error`, `gate_failed`, `schema_failed`, or `judge_below_target`. Narrow with `retry_on`; pace transient retries with bounded fixed/exponential delay and replay-stable `retry_jitter`. Omit these fields to preserve immediate all-class v1 retries.
 - **Document-quality loops: review → patch → apply** (see the template) — a reviewer names defects and their owning node, a patch step regenerates ONLY flagged sections, deterministic code merges with a no-shrink keep-or-revert guard and emits `changes.diff` + `changelog.md` (applied / rejected per finding). Never pay for whole-document rewrites per iteration.
 - **Cache + surgical regen:** passing prompt-step outputs cached by content hash in `<yaml-dir>/cache/`; hit = model + judge skipped, gate re-runs. Upstream changes invalidate downstream automatically; `--regen <id>` forces one node fresh. `--no-cache` for paired experiments.
 - **Iteration history (git):** every run dir is a git repo; the runner commits after each step (`<id>: PASS/FAIL`), after QA (`QA: pass/fail`), and commits any operator hand-edits before `--verify`. `git -C runs/<dir> log --stat` = the changelog between iterations; `git diff HEAD~1` = what the last cycle changed. Document loops additionally emit `changes.diff` + `changelog.md` (applied/rejected per finding) and failed judged attempts persist as `<id>.aN.md`.

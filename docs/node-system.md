@@ -30,7 +30,7 @@ These capabilities are already enforced by the v1 runner and exposed through
 | Join | `needs: [a, b]` | downstream never runs unless every dependency passes |
 | Route | source `schema` + branch `when` / `from` | malformed source or ambiguous route fails closed |
 | Gate | `gate` shell command | non-zero rejects the attempt |
-| Retry | `retries` + `timeout` | exhaustion fails the node and skips descendants |
+| Retry | `retries` + eligible classes + bounded pacing + `timeout` | ineligible failure or exhaustion fails the node and skips descendants |
 | Judge loop | `judge` | score may request revision; a gate remains mechanical authority |
 | Final QA | top-level `qa` | negative or malformed verdict fails the run |
 | Cache | passing prompt output | hit reruns the gate before reuse |
@@ -38,6 +38,10 @@ These capabilities are already enforced by the v1 runner and exposed through
 | Evidence | every run | failure remains inspectable with non-zero exit |
 
 ## Dynamic patterns available now
+
+The action catalog packages proven patterns without expanding this runtime
+vocabulary. `piw add` materializes each action as normal YAML so an agent can
+inspect, edit, validate, and test every node. See [`actions.md`](actions.md).
 
 ### Parallel research and deterministic merge
 

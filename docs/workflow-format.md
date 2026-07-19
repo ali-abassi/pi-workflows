@@ -57,9 +57,13 @@ capabilities under consideration.
 
 `tools:` is a Pi tool-selection boundary, not an operating-system sandbox.
 In particular, allowing `bash` allows arbitrary commands with the current
-user's permissions, and `agent: true` enables Pi's full default tool loop. Run
+user’s permissions, and `agent: true` enables Pi's full default tool loop. Run
 untrusted or unattended workflows inside an OS/container sandbox with only the
 required files, credentials, and network access.
+
+Reusable actions do not add runtime kinds. `piw create --action` and `piw add`
+expand a tested fragment into ordinary nodes before validation. See
+[`actions.md`](actions.md).
 
 ## Inputs available inside nodes
 
@@ -129,6 +133,24 @@ Validation fails when a route reads a field its source does not promise, so a
 valid-but-wrong model response cannot silently skip the intended branch.
 
 ## Complete field reference
+
+Retry behavior can be narrowed and paced per step:
+
+```yaml
+retries: 3
+retry_on: [model_error, schema_failed]
+retry_delay_seconds: 1
+retry_backoff: exponential
+retry_max_delay_seconds: 8
+retry_jitter: 0.2
+timeout: 120
+```
+
+Every failure is classified as `command_exit`, `model_error`, `gate_failed`,
+`schema_failed`, or `judge_below_target`. Omitted `retry_on` retains the v1
+compatibility behavior of retrying every class. Jitter is derived from step id
+and attempt, so pacing is reproducible rather than random; retry decisions and
+delays are emitted into the event/log evidence.
 
 Run `piw schema` for the concise node/input catalog or `piw schema --json` for
 the authoritative JSON Schema, including every top-level, step, judge, QA,

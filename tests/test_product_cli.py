@@ -136,6 +136,112 @@ class ProductCliTests(unittest.TestCase):
             self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
             self.assertTrue(json.loads(validated.stdout)["holds"])
 
+    def test_action_catalog_creates_and_expands_plain_valid_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            env = {**os.environ, "PI_WORKFLOWS_ROOTS": raw}
+            listed = subprocess.run(
+                [sys.executable, str(CLI), "actions", "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(listed.returncode, 0, listed.stderr)
+            actions = {item["id"]: item for item in json.loads(listed.stdout)}
+            self.assertGreaterEqual(len(actions), 8)
+            self.assertEqual(actions["parallel-review"]["nodes"], 3)
+
+            created_paths = {}
+            for action_id in actions:
+                target_path = root / action_id
+                created = subprocess.run(
+                    [sys.executable, str(CLI), "create", action_id, "--dir", str(target_path),
+                     "--action", action_id, "--json"],
+                    capture_output=True, text=True, env=env, timeout=30, check=False,
+                )
+                self.assertEqual(created.returncode, 0, created.stderr)
+                validated_action = subprocess.run(
+                    [sys.executable, str(CLI), "validate", str(target_path / "steps.yaml"), "--json"],
+                    capture_output=True, text=True, env=env, timeout=30, check=False,
+                )
+                self.assertEqual(
+                    validated_action.returncode, 0,
+                    f"{action_id}: {validated_action.stdout}{validated_action.stderr}",
+                )
+                created_paths[action_id] = target_path
+
+            target = created_paths["parallel-review"]
+            spec = yaml.safe_load((target / "steps.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(
+                [step["id"] for step in spec["steps"]],
+                ["parallel-review-correctness", "parallel-review-failure-modes", "parallel-review-verdict"],
+            )
+            self.assertNotIn("{{", (target / "steps.yaml").read_text(encoding="utf-8"))
+
+            added = subprocess.run(
+                [sys.executable, str(CLI), "add", str(target / "steps.yaml"),
+                 "extract-action-items", "--id", "extract", "--needs", "parallel-review-verdict", "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(added.returncode, 0, added.stderr)
+            self.assertEqual(json.loads(added.stdout)["added"], ["extract"])
+            expanded = yaml.safe_load((target / "steps.yaml").read_text(encoding="utf-8"))
+            extract = expanded["steps"][-1]
+            self.assertEqual(extract["needs"], ["parallel-review-verdict"])
+            self.assertIn("{step.parallel-review-verdict}", extract["prompt"])
+
+            validated = subprocess.run(
+                [sys.executable, str(CLI), "validate", str(target / "steps.yaml"), "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+            self.assertTrue(json.loads(validated.stdout)["holds"])
+
+    def test_retry_policy_classifies_eligibility_and_records_backoff(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            steps = root / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "retry-policy",
+                "steps": [{
+                    "id": "transient",
+                    "cmd": "n=$(cat \"$RUN/count\" 2>/dev/null || printf 0); n=$((n+1)); "
+                           "printf '%s' \"$n\" > \"$RUN/count\"; "
+                           "if [ \"$n\" -lt 2 ]; then exit 7; fi; printf recovered",
+                    "retries": 3,
+                    "retry_on": ["command_exit"],
+                    "retry_delay_seconds": 0.01,
+                    "retry_backoff": "exponential",
+                    "retry_max_delay_seconds": 0.02,
+                    "retry_jitter": 0.1,
+                }],
+            }, sort_keys=False), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(RUNNER), str(steps)],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            run_dir = next((root / "runs").iterdir())
+            ledger = json.loads((run_dir / "ledger.json").read_text(encoding="utf-8"))
+            self.assertEqual(ledger[0]["attempts"], 2)
+            self.assertIn("(command_exit)", (run_dir / "log.md").read_text(encoding="utf-8"))
+
+            blocked = root / "blocked.yaml"
+            blocked.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "retry-blocked",
+                "steps": [{"id": "terminal", "cmd": "exit 9", "retries": 3,
+                           "retry_on": ["gate_failed"]}],
+            }, sort_keys=False), encoding="utf-8")
+            stopped = subprocess.run(
+                [sys.executable, str(RUNNER), str(blocked)],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            self.assertNotEqual(stopped.returncode, 0)
+            blocked_run = next((root / "runs").glob("retry-blocked-*"))
+            blocked_ledger = json.loads((blocked_run / "ledger.json").read_text(encoding="utf-8"))
+            self.assertEqual(blocked_ledger[0]["attempts"], 1)
+            self.assertIn("no retry for command_exit", (blocked_run / "log.md").read_text(encoding="utf-8"))
+
     def test_required_input_fails_before_any_step_runs(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

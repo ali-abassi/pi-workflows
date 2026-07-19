@@ -280,6 +280,19 @@ def cache_key(cfg: dict, spec: dict, prompt: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
 
 
+def retry_delay(step: dict, step_id: str, failed_attempt: int) -> float:
+    """Return a bounded, replay-stable retry delay for one failed attempt."""
+    base = float(step.get("retry_delay_seconds", 0))
+    if step.get("retry_backoff", "fixed") == "exponential":
+        base *= 2 ** max(0, failed_attempt - 1)
+    jitter = float(step.get("retry_jitter", 0))
+    if base and jitter:
+        digest = hashlib.sha256(f"{step_id}:{failed_attempt}".encode()).digest()
+        unit = int.from_bytes(digest[:8], "big") / ((1 << 64) - 1)
+        base *= 1 + ((unit * 2) - 1) * jitter
+    return max(0.0, min(base, float(step.get("retry_max_delay_seconds", 300))))
+
+
 def run_judge(judge: dict, spec: dict, candidate: str, run_dir: Path, sid: str,
               iteration: int, cwd: Path, usage_acc: dict) -> tuple[float | None, str]:
     prompt = judge["prompt"].replace("{out}", candidate).replace("{run}", str(run_dir))
@@ -399,6 +412,7 @@ class Runner:
             entry["attempts"] = attempt
             t0 = time.monotonic()
             failure = ""
+            failure_kind = ""
             emit("step_attempt", id=sid, attempt=attempt, max_attempts=attempts)
             if step.get("cmd"):
                 proc = run_shell(step["cmd"], out_file, self.run_dir, sid, self.cwd, step.get("timeout", 900))
@@ -409,6 +423,7 @@ class Runner:
                 (self.run_dir / f"{sid}.stderr").write_text(proc.stderr)
                 ok = proc.returncode == 0
                 if not ok:
+                    failure_kind = "command_exit"
                     failure = f"cmd exited {proc.returncode}: {(proc.stdout + proc.stderr)[-2000:]}"
             else:
                 text, usage, ok, detail, _ = call_pi(step, self.spec, prompt, self.cwd)
@@ -417,23 +432,27 @@ class Runner:
                 usage_acc["cost"] += usage["cost"]
                 out_file.write_text(text)
                 if not ok:
+                    failure_kind = "model_error"
                     failure = detail
             if ok and step.get("gate"):
                 g = run_shell(step["gate"], out_file, self.run_dir, sid, self.cwd, timeout=300)
                 ok = g.returncode == 0
                 emit("step_gate", id=sid, attempt=attempt, passed=ok)
                 if not ok:
+                    failure_kind = "gate_failed"
                     failure = f"gate `{step['gate']}` exited {g.returncode}: {(g.stdout + g.stderr)[-2000:]}"
             if ok and step.get("schema"):
                 detail = check_step_schema(step, out_file)
                 emit("step_schema", id=sid, attempt=attempt, passed=not detail)
                 if detail:
-                    ok, failure = False, detail
+                    ok, failure_kind, failure = False, "schema_failed", detail
             if ok and judge:
                 score, verdict = run_judge(judge, self.spec, out_file.read_text(), self.run_dir,
                                            sid, attempt, self.cwd, usage_acc)
                 if score is None:
-                    ok, failure = False, 'judge output unparseable (needs "score": N)'
+                    ok, failure_kind, failure = (
+                        False, "judge_below_target", 'judge output unparseable (needs "score": N)'
+                    )
                 else:
                     if score > best_score:
                         best_score, best_text = score, out_file.read_text()
@@ -442,6 +461,7 @@ class Runner:
                     emit("step_judge", id=sid, attempt=attempt, max_attempts=attempts,
                          score=score, threshold=threshold, passed=ok)
                     if not ok:
+                        failure_kind = "judge_below_target"
                         failure = (f"judge scored {score} < target {threshold}. Judge feedback:\n"
                                    f"{verdict[-2000:]}")
                     log(self.run_dir, f"{sid} attempt {attempt}/{attempts}: judge score {score} "
@@ -453,6 +473,23 @@ class Runner:
             if ok:
                 passed = True
                 break
+            if attempt < attempts:
+                eligible = set(step.get("retry_on") or [
+                    "command_exit", "model_error", "gate_failed", "schema_failed", "judge_below_target",
+                ])
+                if failure_kind not in eligible:
+                    log(self.run_dir, f"{sid}: no retry for {failure_kind or 'unknown_failure'} "
+                                      f"(eligible: {sorted(eligible)})")
+                    emit("step_retry_skipped", id=sid, attempt=attempt,
+                         failure_kind=failure_kind or "unknown_failure")
+                    break
+                delay = retry_delay(step, sid, attempt)
+                emit("step_retry", id=sid, attempt=attempt, next_attempt=attempt + 1,
+                     failure_kind=failure_kind or "unknown_failure", delay_seconds=round(delay, 3))
+                log(self.run_dir, f"{sid}: retry {attempt + 1}/{attempts} after {delay:.3f}s "
+                                  f"({failure_kind or 'unknown_failure'})")
+                if delay:
+                    time.sleep(delay)
             if attempt < attempts and base_prompt is not None:
                 if out_file.exists():  # keep the rejected attempt diffable
                     (self.run_dir / f"{sid}.a{attempt}.md").write_text(out_file.read_text())

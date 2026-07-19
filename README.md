@@ -30,6 +30,8 @@ repeatable agent work without pretending model output itself is deterministic.
   timeouts, and stop conditions are code-owned.
 - **Configurable agent steps.** Pin the model, reasoning, system prompt, tool
   allowlist, output contract, gate, judge, artifacts, and retry boundary per node.
+- **Reusable action catalog.** Expand tested review, extraction, coding,
+  evidence, JSONL, and exact-item patterns into ordinary inspectable YAML nodes.
 - **Proof, not vibes.** Every run preserves events, resolved input, outputs,
   rejected attempts, stderr, tokens, cost, time, cache state, and Git history.
 - **Built-in evaluation.** Run corpora, compare models while holding judges
@@ -176,6 +178,26 @@ piw detail steps.yaml
 piw stats steps.yaml
 ```
 
+## Start from tested actions
+
+Users and agents do not need to rebuild common graph fragments. Actions are
+versioned authoring templates that expand into normal `steps.yaml` nodes—there
+is no hidden action runtime or second graph format.
+
+```bash
+piw actions
+piw actions parallel-review
+piw create review --action parallel-review
+piw add review/steps.yaml extract-action-items \
+  --id extract --needs parallel-review-verdict
+piw validate review/steps.yaml
+```
+
+The included catalog covers typed extraction and routing, parallel independent
+review, bounded judge/refine, repository change + diff verification, evidence
+synthesis, canonical JSONL, and the five-stage exact item pipeline. See
+[`docs/actions.md`](docs/actions.md) for every input/output/failure contract.
+
 ```mermaid
 flowchart LR
   I(["immutable input"]) --> D["draft · LLM"]
@@ -206,7 +228,7 @@ of cosmetically different nodes:
 | Join | `needs: [a, b]` | runner |
 | Typed route | source `schema:` + branch `when:` / `from:` | code |
 | Mechanical verification | `gate:` | code |
-| Bounded recovery | `retries:` + `timeout:` | runner |
+| Bounded recovery | `retries`, `retry_on`, delay/backoff/jitter + `timeout` | runner |
 | Semantic improvement | `judge:` | model advises; gate decides |
 | Final review | top-level `qa:` | structured verdict |
 | Cost avoidance | content-addressed prompt cache | runner |
@@ -277,7 +299,7 @@ artifacts blindly.
 
 ## Examples
 
-The [`examples/`](examples/) catalog contains 13 runnable workflows, from two
+The [`examples/`](examples/) catalog contains 14 runnable workflows, from two
 shell steps to parallel agents, typed routing, tool allowlists, bounded judge
 loops, final QA, caching, cost analysis, and an exact five-step 1,000-item bulk
 pipeline.
@@ -296,6 +318,9 @@ graphs of the sequential, parallel, conditional, and judged examples.
 
 ```text
 piw create <name>                 scaffold a valid workflow
+piw create <name> --action <id>   scaffold from a tested action template
+piw actions [id]                  list or inspect reusable actions
+piw add <workflow> <action> ...   expand an action into ordinary YAML nodes
 piw schema [--json]               inspect every field, node, and runtime input
 piw ls [--json]                   discover workflows
 piw graph <workflow> [--json]     inspect the DAG

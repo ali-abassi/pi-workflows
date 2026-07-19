@@ -463,6 +463,7 @@ def resolve_prompt(steps_path: Path, run_dir: Path, step_id: str) -> dict[str, A
 # this is a deliberately small surface so the file remains the source of truth.
 EDITABLE = {
     "model", "thinking", "prompt", "cmd", "gate", "tools", "retries", "timeout",
+    "retry_on", "retry_delay_seconds", "retry_backoff", "retry_max_delay_seconds", "retry_jitter",
     # Routing and declared outputs are editable too, so an agent can build a
     # branching workflow without hand-writing yaml.
     "when", "from", "produces",
@@ -515,6 +516,8 @@ def update_step(steps_path: Path, step_id: str, changes: dict[str, Any]) -> dict
             continue
         if key in ("retries", "timeout"):
             coerced: Any = int(value)
+        elif key in ("retry_delay_seconds", "retry_max_delay_seconds", "retry_jitter"):
+            coerced = float(value)
         elif key == "prompt":
             from ruamel.yaml.scalarstring import LiteralScalarString
             text = str(value)
@@ -543,6 +546,35 @@ def update_step(steps_path: Path, step_id: str, changes: dict[str, Any]) -> dict
         yaml_rt.dump(document, handle)
     temp.replace(steps_path)
     return {"id": step_id, "changed": sorted(changes)}
+
+
+def append_steps(steps_path: Path, steps: list[dict[str, Any]]) -> None:
+    """Append already-validated ordinary nodes while preserving the YAML file."""
+    try:
+        from ruamel.yaml import YAML
+    except ImportError as error:  # pragma: no cover - depends on environment
+        raise WorkflowParseError(
+            "editing needs ruamel.yaml (pip install ruamel.yaml); steps.yaml left untouched"
+        ) from error
+    if not steps:
+        raise WorkflowParseError("no action steps to append")
+
+    original = steps_path.read_text(encoding="utf-8")
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True
+    yaml_rt.width = 4096
+    offset = _sequence_offset(original)
+    yaml_rt.indent(mapping=2, sequence=offset + 2, offset=offset)
+    document = yaml_rt.load(original)
+    if not document or not isinstance(document.get("steps"), list):
+        raise WorkflowParseError("steps.yaml has no steps")
+    for step in steps:
+        document["steps"].append(step)
+
+    temp = steps_path.with_suffix(steps_path.suffix + ".tmp")
+    with temp.open("w", encoding="utf-8") as handle:
+        yaml_rt.dump(document, handle)
+    temp.replace(steps_path)
 
 
 def parse_steps(steps_path: Path) -> dict[str, Any]:

@@ -24,6 +24,7 @@ the fallback and has no Loops dependency.
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import json
 import os
@@ -48,6 +49,8 @@ import graph as pygraph
 
 DAEMON = f"http://127.0.0.1:{loopd.DEFAULT_PORT}"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "workflow.schema.json"
+ACTION_DIR = Path(__file__).resolve().parent.parent / "actions"
+ACTION_REF_RE = re.compile(r"\{step\.([A-Za-z0-9_-]+)\}")
 
 # Compact kind labels; the canvas shows icons, the terminal shows four chars.
 KIND_LABEL = {
@@ -215,6 +218,174 @@ def cmd_schema(args) -> int:
     out()
     out("Judge: {out}, {run} · QA: {artifacts}, {run}")
     out("Full reference: docs/workflow-format.md · machine form: piw schema --json")
+    return 0
+
+
+# ---------------------------------------------------------------------- actions
+
+
+def _action_catalog() -> dict[str, dict[str, Any]]:
+    catalog: dict[str, dict[str, Any]] = {}
+    for path in sorted(ACTION_DIR.glob("*.yaml")):
+        try:
+            action = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as error:
+            raise RuntimeError(f"action template {path.name} is unreadable: {error}") from error
+        required = {"version", "id", "title", "description", "category", "inputs", "outputs", "failure", "steps"}
+        missing = required - set(action) if isinstance(action, dict) else required
+        if missing or action.get("version") != 1 or not isinstance(action.get("steps"), list) or not action["steps"]:
+            detail = f"missing {', '.join(sorted(missing))}" if missing else "invalid version or steps"
+            raise RuntimeError(f"action template {path.name} is malformed: {detail}")
+        identifier = str(action["id"])
+        if path.stem != identifier or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", identifier):
+            raise RuntimeError(f"action template id must match its filename: {path.name}")
+        if identifier in catalog:
+            raise RuntimeError(f"duplicate action template: {identifier}")
+        action["path"] = str(path)
+        catalog[identifier] = action
+    if not catalog:
+        raise RuntimeError(f"no action templates found in {ACTION_DIR}")
+    return catalog
+
+
+def _source_reference(needs: list[str]) -> str:
+    if not needs:
+        return "{input}"
+    if len(needs) == 1:
+        return f"{{step.{needs[0]}}}"
+    return "\n\n".join(f'<source step="{step}">\n{{step.{step}}}\n</source>' for step in needs)
+
+
+def instantiate_action(action: dict[str, Any], prefix: str, external_needs: list[str]) -> list[dict[str, Any]]:
+    """Expand a reusable action into ordinary v1 nodes with no runtime indirection."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", prefix):
+        raise RuntimeError("--id must start with a letter or number and contain only letters, numbers, _ or -")
+    raw_steps = copy.deepcopy(action["steps"])
+    local_ids = [str(step.get("id") or "") for step in raw_steps]
+    if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", sid) for sid in local_ids):
+        raise RuntimeError(f"action {action['id']} has an invalid local step id")
+    if len(set(local_ids)) != len(local_ids):
+        raise RuntimeError(f"action {action['id']} has duplicate local step ids")
+    id_map = {
+        sid: prefix if len(local_ids) == 1 else f"{prefix}-{sid}"
+        for sid in local_ids
+    }
+    source = _source_reference(external_needs)
+
+    def expand(value: Any) -> Any:
+        if isinstance(value, str):
+            text_value = value.replace("{{source}}", source).replace("{{prefix}}", prefix)
+            text_value = ACTION_REF_RE.sub(
+                lambda match: f"{{step.{id_map.get(match.group(1), match.group(1))}}}", text_value,
+            )
+            if "{{" in text_value or "}}" in text_value:
+                raise RuntimeError(f"action {action['id']} contains an unknown template placeholder")
+            return text_value
+        if isinstance(value, list):
+            return [expand(item) for item in value]
+        if isinstance(value, dict):
+            return {key: expand(item) for key, item in value.items()}
+        return value
+
+    expanded: list[dict[str, Any]] = []
+    for raw in raw_steps:
+        local_id = str(raw["id"])
+        internal_needs = list(raw.get("needs") or [])
+        unknown = set(internal_needs) - set(local_ids)
+        if unknown:
+            raise RuntimeError(f"action {action['id']} references unknown local step(s): {', '.join(sorted(unknown))}")
+        raw["id"] = id_map[local_id]
+        raw["needs"] = [id_map[item] for item in internal_needs] if internal_needs else list(external_needs)
+        expanded.append(expand(raw))
+    return expanded
+
+
+def _validate_candidate(spec: dict[str, Any]) -> None:
+    try:
+        from jsonschema import Draft202012Validator
+        contract = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (ImportError, OSError, ValueError) as error:
+        raise RuntimeError(f"workflow schema validator unavailable: {error}") from error
+    errors = sorted(
+        Draft202012Validator(contract).iter_errors(spec),
+        key=lambda error: [str(part) for part in error.absolute_path],
+    )
+    if errors:
+        error = errors[0]
+        location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+        raise RuntimeError(f"action would make the workflow invalid at {location}: {error.message}")
+    try:
+        pygraph.build_deps(spec.get("steps") or [])
+    except (pygraph.WorkflowParseError, KeyError, TypeError) as error:
+        raise RuntimeError(f"action would make the graph invalid: {error}") from error
+
+
+def cmd_actions(args) -> int:
+    catalog = _action_catalog()
+    if args.action:
+        action = catalog.get(args.action)
+        if not action:
+            return fail(f"unknown action '{args.action}' (try: piw actions)")
+        if args.json:
+            out(json.dumps(action, separators=(",", ":")))
+        else:
+            out(f"{action['id']} · {action['title']}")
+            out(action["description"])
+            out(f"category: {action['category']} · nodes: {len(action['steps'])}")
+            out(f"input: {action['inputs']}")
+            out(f"output: {action['outputs']}")
+            out(f"failure: {action['failure']}")
+            out()
+            out(yaml.safe_dump({"steps": action["steps"]}, sort_keys=False, width=100).rstrip())
+        return 0
+    rows = [{key: value for key, value in action.items() if key != "steps"} | {"nodes": len(action["steps"])}
+            for action in catalog.values()]
+    if args.json:
+        out(json.dumps(rows, separators=(",", ":")))
+        return 0
+    width = max(len(action["id"]) for action in catalog.values())
+    out(f"{'ACTION'.ljust(width)}  NODES  CATEGORY       PURPOSE")
+    for action in catalog.values():
+        out(f"{action['id'].ljust(width)}  {str(len(action['steps'])).rjust(5)}  "
+            f"{str(action['category'])[:14].ljust(14)} {action['description']}")
+    out("\nAdd one: piw add <workflow> <action> --id <prefix> [--needs step,step]")
+    return 0
+
+
+def cmd_add_action(args) -> int:
+    workflow = need(args.workflow)
+    action = _action_catalog().get(args.action)
+    if not action:
+        return fail(f"unknown action '{args.action}' (try: piw actions)")
+    graph = graph_for(workflow)
+    existing = [node["id"] for node in graph["nodes"] if not node.get("synthetic")]
+    needs = [item for item in (args.needs or "").split(",") if item]
+    unknown = set(needs) - set(existing)
+    if unknown:
+        return fail(f"--needs references unknown step(s): {', '.join(sorted(unknown))}")
+    try:
+        steps = instantiate_action(action, args.id or action["id"], needs)
+        collisions = set(existing) & {step["id"] for step in steps}
+        if collisions:
+            return fail(f"action step id already exists: {', '.join(sorted(collisions))} (choose --id)")
+        path = Path(workflow["path"])
+        spec = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        candidate = copy.deepcopy(spec)
+        candidate["steps"] = [*(candidate.get("steps") or []), *steps]
+        _validate_candidate(candidate)
+        pygraph.append_steps(path, steps)
+    except (OSError, yaml.YAMLError, RuntimeError, pygraph.WorkflowParseError) as error:
+        return fail(str(error))
+    payload = {
+        "ok": True, "action": action["id"], "workflow": workflow["id"],
+        "added": [step["id"] for step in steps], "path": workflow["path"],
+        "next": f"piw validate {shlex.quote(workflow['path'])}",
+    }
+    if args.json:
+        out(json.dumps(payload, separators=(",", ":")))
+    else:
+        out(f"added {action['id']} · {', '.join(payload['added'])}")
+        out(f"next: {payload['next']}")
     return 0
 
 
@@ -1112,6 +1283,26 @@ def cmd_set(args) -> int:
             changes[key] = int(value)
         else:
             return fail(f"--{key} must be a whole number (or '' to clear)")
+    for key in ("retry_delay_seconds", "retry_max_delay_seconds", "retry_jitter"):
+        value = getattr(args, key)
+        if value is None:
+            continue
+        if value == "":
+            changes[key] = ""
+            continue
+        try:
+            changes[key] = float(value)
+        except ValueError:
+            return fail(f"--{key.replace('_', '-')} must be a number (or '' to clear)")
+    if args.retry_backoff is not None:
+        changes["retry_backoff"] = args.retry_backoff
+    if args.retry_on is not None:
+        allowed = {"command_exit", "model_error", "gate_failed", "schema_failed", "judge_below_target"}
+        values = [item for item in args.retry_on.split(",") if item]
+        unknown = set(values) - allowed
+        if unknown:
+            return fail(f"--retry-on has unknown failure class(es): {', '.join(sorted(unknown))}")
+        changes["retry_on"] = values if values else ""
     if args.prompt_file:
         source = Path(args.prompt_file)
         if not source.is_file():
@@ -1287,7 +1478,31 @@ def cmd_create(args) -> int:
     steps_path = directory / "steps.yaml"
     if steps_path.exists():
         return fail(f"refusing to overwrite {steps_path}")
-    directory.mkdir(parents=True, exist_ok=True)
+    action = None
+    if args.action:
+        try:
+            action = _action_catalog().get(args.action)
+        except RuntimeError as error:
+            return fail(str(error))
+        if not action:
+            return fail(f"unknown action '{args.action}' (try: piw actions)")
+    steps = instantiate_action(action, action["id"], []) if action else [
+        {
+            "id": "produce",
+            "prompt": (
+                "Complete this work item. Return only the requested artifact, with no meta commentary.\n\n"
+                "{input}"
+            ),
+            "gate": 'test -s "$OUT"',
+            "retries": 1,
+        },
+        {
+            "id": "verify",
+            "needs": ["produce"],
+            "cmd": 'test -s "$RUN/produce.md" && cp "$RUN/produce.md" "$OUT"',
+            "gate": 'test -s "$OUT"',
+        },
+    ]
     spec = {
         "version": 1,
         "workflow": identifier,
@@ -1304,26 +1519,19 @@ def cmd_create(args) -> int:
                 "{artifacts}"
             ),
         },
-        "steps": [
-            {
-                "id": "produce",
-                "prompt": (
-                    "Complete this work item. Return only the requested artifact, with no meta commentary.\n\n"
-                    "{input}"
-                ),
-                "gate": 'test -s "$OUT"',
-                "retries": 1,
-            },
-            {
-                "id": "verify",
-                "needs": ["produce"],
-                "cmd": 'test -s "$RUN/produce.md" && cp "$RUN/produce.md" "$OUT"',
-                "gate": 'test -s "$OUT"',
-            },
-        ],
+        "steps": steps,
     }
+    try:
+        _validate_candidate(spec)
+    except RuntimeError as error:
+        return fail(str(error))
+    directory.mkdir(parents=True, exist_ok=True)
     steps_path.write_text(yaml.safe_dump(spec, sort_keys=False, width=100), encoding="utf-8")
-    payload = {"ok": True, "id": identifier, "path": str(steps_path), "next": f"piw validate {shlex.quote(str(steps_path))}"}
+    payload = {
+        "ok": True, "id": identifier, "path": str(steps_path),
+        "action": action["id"] if action else None,
+        "next": f"piw validate {shlex.quote(str(steps_path))}",
+    }
     if args.json:
         out(json.dumps(payload, separators=(",", ":")))
     else:
@@ -1453,11 +1661,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     add("schema", "show every workflow field, node kind, and runtime input", workflow=False)
 
+    actions = add("actions", "list or inspect reusable action-node templates", workflow=False)
+    actions.add_argument("action", nargs="?", help="action id to inspect")
+
+    add_action = add("add", "expand a reusable action into ordinary workflow nodes")
+    add_action.add_argument("action", help="action id from `piw actions`")
+    add_action.add_argument("--id", help="runtime id or prefix (default: action id)")
+    add_action.add_argument("--needs", help="comma-separated existing steps supplying the action input")
+
     add("doctor", "verify the standalone product and optional integrations", workflow=False)
 
     create = add("create", "scaffold a valid input-to-artifact workflow", workflow=False)
     create.add_argument("name")
     create.add_argument("--dir", help="target directory (default: ./<workflow-name>)")
+    create.add_argument("--action", help="start from one reusable action instead of the generic two-step scaffold")
     create.add_argument("--model", default=os.environ.get("PI_WORKFLOWS_MODEL", "openai-codex/gpt-5.6-luna"))
     create.add_argument("--qa-model", default=os.environ.get("PI_WORKFLOWS_QA_MODEL", "openai-codex/gpt-5.6-terra"))
     create.add_argument("--thinking", choices=["off", "minimal", "low", "medium", "high", "xhigh", "max"], default="low")
@@ -1548,6 +1765,11 @@ def build_parser() -> argparse.ArgumentParser:
     # workflow default, matching every other --flag here.
     setter.add_argument("--retries", metavar="N", help="attempts on failure; '' clears")
     setter.add_argument("--timeout", metavar="SECONDS", help="per-step timeout; '' clears")
+    setter.add_argument("--retry-on", help="comma-separated eligible failure classes; '' clears")
+    setter.add_argument("--retry-delay-seconds", help="base retry delay; '' clears")
+    setter.add_argument("--retry-backoff", choices=["", "fixed", "exponential"], help="retry pacing; '' clears")
+    setter.add_argument("--retry-max-delay-seconds", help="retry delay ceiling; '' clears")
+    setter.add_argument("--retry-jitter", help="deterministic jitter fraction 0..1; '' clears")
     setter.add_argument("--prompt-file", help="replace the step's prompt with this file's contents")
     setter.add_argument("--when", metavar="JSON",
                         help='routing condition, e.g. \'{"op":"equals","path":"/kind","value":"bug"}\''
@@ -1586,6 +1808,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMANDS = {
     "ls": cmd_ls, "schema": cmd_schema, "graph": cmd_graph, "validate": cmd_validate, "run": cmd_run,
+    "actions": cmd_actions, "add": cmd_add_action,
     "ui": cmd_ui,
     "runs": cmd_runs, "show": cmd_show, "stats": cmd_stats, "path": cmd_path,
     "set": cmd_set, "detail": cmd_detail, "batch": cmd_batch,

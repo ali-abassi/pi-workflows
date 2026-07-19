@@ -12,7 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-const ACTIONS = ["doctor", "schema", "list", "create", "graph", "path", "validate", "run", "batch", "batch-status", "batch-cancel", "runs", "detail", "show", "stats", "schedule", "automations", "automation"] as const;
+const ACTIONS = ["doctor", "schema", "actions", "add", "list", "create", "graph", "path", "validate", "run", "batch", "batch-status", "batch-cancel", "runs", "detail", "show", "stats", "schedule", "automations", "automation"] as const;
 const PIW = fileURLToPath(new URL("../bin/piw", import.meta.url));
 const TOOL_MAX_LINES = 500;
 const TOOL_MAX_BYTES = 24 * 1024;
@@ -38,7 +38,7 @@ export function argumentsFor(params: Record<string, unknown>): string[] {
   if (!(ACTIONS as readonly string[]).includes(action)) throw new Error(`unsupported Pi Workflows action: ${action}`);
   const command = action === "list" ? "ls" : action;
   const args = [command];
-  if (!["ls", "doctor", "schema", "create", "batch-status", "batch-cancel", "automations", "automation"].includes(command)) {
+  if (!["ls", "doctor", "schema", "actions", "create", "batch-status", "batch-cancel", "automations", "automation"].includes(command)) {
     const workflow = typeof params.workflow === "string" ? params.workflow.trim() : "";
     if (!workflow) throw new Error(`${action} requires a workflow id or unique name`);
     args.push(workflow);
@@ -52,6 +52,17 @@ export function argumentsFor(params: Record<string, unknown>): string[] {
     if (typeof params.qaModel === "string" && params.qaModel.trim()) args.push("--qa-model", params.qaModel.trim());
     if (typeof params.thinking === "string" && params.thinking.trim()) args.push("--thinking", params.thinking.trim());
     if (params.workers !== undefined) args.push("--workers", String(params.workers));
+    if (typeof params.actionId === "string" && params.actionId.trim()) args.push("--action", params.actionId.trim());
+  }
+  if (command === "actions") {
+    if (typeof params.actionId === "string" && params.actionId.trim()) args.push(params.actionId.trim());
+  }
+  if (command === "add") {
+    const actionId = typeof params.actionId === "string" ? params.actionId.trim() : "";
+    if (!actionId) throw new Error("add requires an actionId from the reusable action catalog");
+    args.push(actionId);
+    if (typeof params.id === "string" && params.id.trim()) args.push("--id", params.id.trim());
+    if (typeof params.needs === "string" && params.needs.trim()) args.push("--needs", params.needs.trim());
   }
   if (command === "show") {
     const step = typeof params.step === "string" ? params.step.trim() : "";
@@ -116,10 +127,11 @@ export default function piWorkflows(pi: ExtensionAPI) {
   pi.registerTool({
     name: "pi_workflows",
     label: "Pi Workflows",
-    description: `Create, validate, run, and inspect deterministic Pi workflow graphs, including resumable bulk execution over large input corpora. Use workflows for repeatable multi-step work whose ordering, gates, routes, evidence, or schedule must be mechanical rather than remembered by a model. Output is limited to ${TOOL_MAX_LINES} lines or ${formatSize(TOOL_MAX_BYTES)}; complete truncated output is saved to a temporary file.`,
+    description: `Create, validate, run, and inspect deterministic Pi workflow graphs, including reusable action templates and resumable bulk execution over large input corpora. Use workflows for repeatable multi-step work whose ordering, gates, routes, evidence, or schedule must be mechanical rather than remembered by a model. Output is limited to ${TOOL_MAX_LINES} lines or ${formatSize(TOOL_MAX_BYTES)}; complete truncated output is saved to a temporary file.`,
     promptSnippet: "Operate deterministic workflow DAGs with explicit gates and evidence",
     promptGuidelines: [
       "Use pi_workflows validate before pi_workflows run; validation is free and failed validation must block paid execution.",
+      "Use the actions catalog before authoring common extraction, review, research, coding, JSONL, or exact-item patterns; add expands templates into ordinary inspectable nodes.",
       "Use pi_workflows detail, show, and stats to verify artifacts, gates, cost, and cache behavior instead of inferring success from a process exit alone.",
       "For many inputs, canary with batch limit first, then use batch with detach and requireAll; poll batch-status until every item has a complete execution contract.",
       "Use pi_workflows schedule only after validation and one successful manual smoke; scheduling validates again and fails closed.",
@@ -134,6 +146,8 @@ export default function piWorkflows(pi: ExtensionAPI) {
       qaModel: Type.Optional(Type.String({ maxLength: 200 })),
       thinking: Type.Optional(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const)),
       workers: Type.Optional(Type.Integer({ minimum: 1, maximum: 16 })),
+      actionId: Type.Optional(Type.String({ maxLength: 100 })),
+      needs: Type.Optional(Type.String({ maxLength: 2_000 })),
       step: Type.Optional(Type.String({ maxLength: 200 })),
       node: Type.Optional(Type.String({ maxLength: 200 })),
       input: Type.Optional(Type.String({ maxLength: 100_000 })),

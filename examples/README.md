@@ -22,6 +22,7 @@ cache evidence, and optimization analysis. Every directory contains a complete
 | [`11-parallel-analysis-qa`](workflows/11-parallel-analysis-qa/) | Complex | Parallel model nodes, fan-in, and final QA |
 | [`12-cache-optimization`](workflows/12-cache-optimization/) | Complex | Typed diagnosis, repeated run, cache and hotspot evidence |
 | [`13-thousand-item-pipeline`](workflows/13-thousand-item-pipeline/) | Scale | Five exact steps over 1,000 isolated items with resumable evidence |
+| [`14-action-template-review`](workflows/14-action-template-review/) | Complex | Two reusable actions expanded into four plain nodes with classified retries |
 
 ## Graph gallery
 
@@ -94,6 +95,21 @@ flowchart LR
   O --> A
   A --> Q["final QA"]
 ```
+
+### 14 · Reusable actions remain ordinary nodes
+
+```mermaid
+flowchart LR
+  I([proposal]) --> C["correctness review"]
+  I --> F["failure-mode review"]
+  C --> V["typed verdict"]
+  F --> V
+  V --> E["typed action extraction"]
+```
+
+This graph is the materialized result of `parallel-review` followed by
+`extract-action-items`. The checked-in YAML contains no action indirection, so
+the Studio, validator, runner, cache, and evidence ledger use the same nodes.
 
 All model-backed example nodes—including judges and QA—are pinned to
 `openai-codex/gpt-5.6-luna` at `medium` reasoning for the public live suite.

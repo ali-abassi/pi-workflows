@@ -2,6 +2,24 @@
 
 All notable changes to Pi Workflows are documented here.
 
+## 0.4.0 — 2026-07-19
+
+- Added a versioned reusable action catalog with eight ready-to-run patterns
+  for typed extraction/routing, parallel review, judge/refine, evidence
+  synthesis, repository changes, canonical JSONL, and exact bulk items.
+- Added `piw actions`, `piw create --action`, and `piw add`; templates expand
+  into ordinary inspectable v1 YAML nodes and validate before atomic writes.
+- Exposed the action catalog and expansion path through Pi's native
+  `pi_workflows` tool so Agent X, Pi, Codex, and Claude Code use one contract.
+- Classified every failed attempt and added retry eligibility, fixed or
+  exponential delay, bounded deterministic jitter, and retry evidence while
+  preserving immediate all-class retry compatibility for existing workflows.
+- Added a 14th runnable Luna-medium example showing two materialized actions,
+  plus contract tests for every catalog entry and retry eligibility behavior.
+- Added a primary-source workflow-engine and agent-orchestration research
+  report with a claim-level audited evidence ledger and explicit deferrals for
+  dynamic map, subworkflow, durable wait, compensation, and graph optimization.
+
 ## 0.3.0 — 2026-07-19
 
 - Made agent-triggered bulk execution a first-class product path: frozen graph

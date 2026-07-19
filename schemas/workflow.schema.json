@@ -139,6 +139,41 @@
           "default": 1,
           "description": "Additional attempts after the first failure when no judge loop is configured."
         },
+        "retry_on": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["command_exit", "model_error", "gate_failed", "schema_failed", "judge_below_target"]
+          },
+          "description": "Failure classes eligible for another attempt. Omit to retain v1 compatibility and retry every failure class."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 300,
+          "default": 0,
+          "description": "Base pause before an eligible retry. Zero preserves the original immediate-retry behavior."
+        },
+        "retry_backoff": {
+          "enum": ["fixed", "exponential"],
+          "default": "fixed",
+          "description": "Whether retry_delay_seconds stays fixed or doubles after each failed attempt."
+        },
+        "retry_max_delay_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 300,
+          "description": "Ceiling applied after backoff and deterministic jitter."
+        },
+        "retry_jitter": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0,
+          "description": "Deterministic fractional jitter around the retry delay, derived from step id and attempt so replay timing stays reproducible."
+        },
         "timeout": {
           "type": "integer",
           "minimum": 1,
@@ -385,9 +420,9 @@
       },
       {
         "capability": "retry",
-        "selector": "retries and timeout",
+        "selector": "retries, retry_on, delay/backoff/jitter, and timeout",
         "owner": "runner",
-        "purpose": "Bound recovery attempts and wall-clock time."
+        "purpose": "Bound recovery attempts and wall-clock time while retrying only declared failure classes with replay-stable pacing."
       },
       {
         "capability": "judge-loop",
@@ -447,6 +482,7 @@
       "dependency": "A node runs only after every dependency passes.",
       "gate": "Non-zero exit fails the attempt.",
       "route": "when is evaluated by code against typed JSON output.",
+      "retry": "Every failed attempt is classified; retry_on decides eligibility and delay/backoff/jitter are bounded and recorded.",
       "run": "Any exhausted failure exits non-zero and preserves evidence."
     }
   }
