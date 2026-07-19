@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "scripts" / "run_steps.py"
+CLI = ROOT / "scripts" / "piw.py"
+
+
+class ProductCliTests(unittest.TestCase):
+    def test_concurrent_runs_keep_inputs_isolated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            steps = root / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "workflow": "input-isolation",
+                "input": {"required": True, "description": "test value"},
+                "steps": [{
+                    "id": "copy",
+                    "cmd": 'sleep 0.1; cat "$INPUT"',
+                    "gate": 'test "$(cat "$OUT")" = "$(cat "$INPUT")"',
+                }],
+            }, sort_keys=False), encoding="utf-8")
+
+            first = subprocess.Popen(
+                [sys.executable, str(RUNNER), str(steps), "--input", "alpha"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            second = subprocess.Popen(
+                [sys.executable, str(RUNNER), str(steps), "--input", "beta"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            first_output = first.communicate(timeout=30)
+            second_output = second.communicate(timeout=30)
+            self.assertEqual(first.returncode, 0, first_output)
+            self.assertEqual(second.returncode, 0, second_output)
+
+            runs = sorted((root / "runs").iterdir())
+            self.assertEqual(len(runs), 2)
+            observed = {(run / "input.txt").read_text(): (run / "copy.md").read_text() for run in runs}
+            self.assertEqual(observed, {"alpha": "alpha", "beta": "beta"})
+            self.assertFalse((root / ".loops-input.txt").exists())
+
+    def test_create_emits_a_valid_explicit_input_workflow(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            target = Path(raw) / "triage"
+            env = {**os.environ, "PI_WORKFLOWS_ROOTS": raw}
+            created = subprocess.run(
+                [sys.executable, str(CLI), "create", "Triage", "--dir", str(target), "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(created.returncode, 0, created.stderr)
+            payload = json.loads(created.stdout)
+            self.assertEqual(payload["id"], "triage")
+
+            spec = yaml.safe_load((target / "steps.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(spec["input"]["required"], True)
+            self.assertIn("{input}", spec["steps"][0]["prompt"])
+
+            validated = subprocess.run(
+                [sys.executable, str(CLI), "validate", str(target / "steps.yaml"), "--json"],
+                capture_output=True, text=True, env=env, timeout=30, check=False,
+            )
+            self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+            self.assertTrue(json.loads(validated.stdout)["holds"])
+
+    def test_required_input_fails_before_any_step_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            steps = root / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "workflow": "required-input",
+                "input": {"required": True},
+                "steps": [{"id": "never", "cmd": "exit 99"}],
+            }), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(RUNNER), str(steps)],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requires --input", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

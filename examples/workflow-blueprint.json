@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "workflow": "uppercase-document",
+  "version": "1.0.0",
+  "description": "Convert one immutable text input into an uppercase output.",
+  "effect": "mutation",
+  "runtime": {"kind": "generic_mutation"},
+  "objective_contract": {
+    "selector": "the declared input.txt fixture",
+    "target": "result.txt in the isolated task workspace",
+    "decision": "whether result.txt exactly equals the uppercase input",
+    "non_goals": ["modify input.txt", "write outside result.txt"]
+  },
+  "lifecycle": ["intake", "plan", "approval", "execute", "verify", "judge", "report"],
+  "stage_capabilities": {
+    "intake": {"tools": []},
+    "plan": {"tools": []},
+    "execute": {"tools": ["read", "edit", "write"]},
+    "repair": {"tools": ["read", "edit", "write"]},
+    "judge": {"tools": []}
+  },
+  "acceptance_criteria": [
+    {"id": "result-exists", "description": "result.txt exists"},
+    {"id": "result-uppercase", "description": "result.txt exactly equals the uppercase input"}
+  ],
+  "verifiers": [
+    {
+      "id": "verify-result",
+      "covers": ["result-exists", "result-uppercase"],
+      "command": ["python3", "-c", "from pathlib import Path; i=Path('input.txt').read_text(); r=Path('result.txt').read_text(); assert r == i.upper()"],
+      "timeout_seconds": 30
+    }
+  ],
+  "task_template": {
+    "task_id": "uppercase-fixture-001",
+    "objective": "Create result.txt containing the uppercase form of input.txt while preserving the final newline.",
+    "inputs": ["input.txt"],
+    "immutable_paths": ["input.txt"],
+    "allowed_write_paths": ["result.txt"],
+    "constraints": ["Do not modify input.txt", "Only write result.txt"],
+    "required_steps": ["Read immutable input", "Write uppercase output", "Verify exact output"],
+    "fixture_files": {"input.txt": "workflow factory fixture\n"}
+  },
+  "context_policy": {"strategy": "full", "max_input_bytes": 1000000},
+  "operations": {
+    "owner": "workflow-operator",
+    "concurrency": "isolated_workspace",
+    "retention_days": 30,
+    "redact_patterns": ["api_key", "authorization"],
+    "failure_response": "Inspect the failed gate artifact, repair the blueprint or implementation, increment the version, and recertify."
+  }
+}

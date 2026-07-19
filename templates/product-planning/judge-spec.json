@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0",
+  "judge": {
+    "id": "implementation-ready-product-plan",
+    "version": "1.6.3",
+    "status": "candidate",
+    "purpose": "Grade one typed artifact in an idea-to-implementation-ready market, pricing, product, design, brand, sitemap, copy, architecture, and roadmap package",
+    "artifact_type": "typed product-planning artifact",
+    "decision": "accept the artifact, improve it, or fail the workflow"
+  },
+  "runtime_context": {
+    "provided": ["idea", "artifact contract", "upstream decisions", "candidate artifact", "stack policy"],
+    "withheld": ["generator identity", "prior numeric scores", "other candidate provenance"],
+    "insufficient_evidence_when": ["a claim depends on research or system state not present in the supplied evidence", "the artifact contract requires an upstream decision that is unavailable"]
+  },
+  "scope_policy": {
+    "evaluation_unit": "one typed artifact at its declared planning stage",
+    "intermediate_readiness": "complete and explicit handoff to the next deterministic planning consumer",
+    "final_readiness": "implementation handoff with a selected market and pricing hypothesis, canonical sitemap, approved-for-build page copy, and explicit closure of every critical or high consistency issue",
+    "forbidden_penalty": "do not penalize an artifact for decisions assigned exclusively to later artifact contracts",
+    "allowed_penalty": "penalize a downstream unknown when the current contract must resolve it, the artifact hides or falsely resolves it, or the handoff lacks an owner and consequence"
+  },
+  "deterministic_gates": [
+    {"id": "G-SCHEMA", "description": "Artifact matches its typed contract", "failure_effect": "below_bar"},
+    {"id": "G-COVERAGE", "description": "Required latent pains, pricing options, design theses, brand roles, audience IDs, messaging fields, claims, framework candidates, stack layers, sitemap nodes, routes, assets, pages, approved copy, states, and coherence resolutions have complete cross-reference coverage", "failure_effect": "below_bar"},
+    {"id": "G-NO-CODE", "description": "Planning output contains no application source files or deployment actions", "failure_effect": "below_bar"},
+    {"id": "G-INTEGRITY", "description": "Inputs, verdicts, revisions, and selected artifacts remain digest-addressed", "failure_effect": "below_bar"}
+  ],
+  "criteria": [
+    {
+      "id": "C-TRUTH", "name": "Truth and evidence discipline", "definition": "Claims distinguish supplied evidence, inference, assumption, and unknown without fabricated validation", "excludes": ["artifact field coverage", "writing polish", "technical decomposition"], "weight": 0.2, "type": "critical", "evidence_requirement": "Cite the smallest claim and its evidence, assumption label, or missing source", "context_required": ["idea", "upstream decisions", "candidate artifact"], "critical_failure_conditions": ["fabricated research, user evidence, metric, capability, price, or validation", "material assumption presented as fact"],
+      "anchors": {
+        "below_bar": "A material claim is fabricated, misleading, or impossible to trace",
+        "7.0": {"state": "Material claims are plausible and major unknowns are visible", "delta_from_previous": "Removes false certainty and labels the largest unknowns", "exclusion": "Several consequential inferences remain unlabeled"},
+        "7.5": {"state": "Consequential inferences are labeled", "delta_from_previous": "Labels the remaining consequential inferences", "exclusion": "Evidence strength is not consistently matched to claim strength"},
+        "8.0": {"state": "Claim strength generally matches supplied evidence", "delta_from_previous": "Aligns strong wording with actual evidence", "exclusion": "One decision lacks provenance or uncertainty"},
+        "8.5": {"state": "Every material decision has provenance or an explicit assumption", "delta_from_previous": "Adds provenance to the remaining decision", "exclusion": "Assumptions are visible but not prioritized for validation"},
+        "9.0": {"state": "Assumptions are prioritized by decision risk", "delta_from_previous": "Orders validation needs by consequence", "exclusion": "One material falsification condition is missing"},
+        "9.5": {"state": "Material assumptions include observable falsification conditions", "delta_from_previous": "Adds the remaining falsification condition", "exclusion": "Any claim could be made more precisely without new evidence"},
+        "10.0": {"state": "Reference-quality evidence discipline and precision", "delta_from_previous": "Eliminates the final avoidable ambiguity", "exclusion": "A senior reviewer would change any claim or uncertainty label"}
+      }
+    },
+    {
+      "id": "C-COMPLETE", "name": "Contract completeness", "definition": "The artifact resolves every field, state, edge, and cross-reference required by its declared contract", "excludes": ["whether decisions are strategically good", "prose style", "factual provenance"], "weight": 0.2, "type": "critical", "evidence_requirement": "Map each required contract element to an artifact location and identify any omission", "context_required": ["artifact contract", "candidate artifact"], "critical_failure_conditions": ["a required design thesis, brand role, audience, message-spine element, claim, framework candidate, stack layer, asset, route, page, state, copy slot, acceptance condition, or dependency is absent", "placeholder text substitutes for a required decision"],
+      "anchors": {
+        "below_bar": "A required contract element or primary state is absent",
+        "7.0": {"state": "Primary contract elements exist", "delta_from_previous": "Adds the missing primary element", "exclusion": "Secondary states or dependencies remain incomplete"},
+        "7.5": {"state": "Primary and secondary contract elements exist", "delta_from_previous": "Adds the remaining secondary coverage", "exclusion": "One edge or cross-reference is unresolved"},
+        "8.0": {"state": "Required coverage and cross-references are complete", "delta_from_previous": "Resolves the missing edge or reference", "exclusion": "One element is technically present but underspecified"},
+        "8.5": {"state": "Every required element is substantively specified", "delta_from_previous": "Replaces the final placeholder-level decision", "exclusion": "A foreseeable degraded condition is not addressed"},
+        "9.0": {"state": "Normal, edge, and degraded conditions are addressed", "delta_from_previous": "Adds the missing degraded condition", "exclusion": "One handoff or ownership detail remains implicit"},
+        "9.5": {"state": "Coverage includes explicit handoffs and ownership", "delta_from_previous": "Makes the remaining handoff explicit", "exclusion": "Any contract element could be resolved further using supplied context"},
+        "10.0": {"state": "Reference-quality exhaustive resolution without filler", "delta_from_previous": "Resolves the last context-answerable detail", "exclusion": "A senior reviewer would add, remove, or expand any contract element"}
+      }
+    },
+    {
+      "id": "C-COHERENCE", "name": "Cross-artifact coherence", "definition": "Decisions follow one product thesis and do not contradict the market frame, latent pains, pricing, design direction, brand system, audience evidence, messaging, claims, framework, stack, assets, sitemap, page copy, architecture, or roadmap", "excludes": ["isolated factual accuracy", "field presence", "visual craft in isolation"], "weight": 0.15, "type": "quality", "evidence_requirement": "Cite linked decisions across the candidate and supplied upstream context", "context_required": ["idea", "upstream decisions", "candidate artifact"], "critical_failure_conditions": [],
+      "anchors": {
+        "below_bar": "The artifact contradicts the product thesis or a binding upstream decision",
+        "7.0": {"state": "Core decisions are compatible", "delta_from_previous": "Removes the primary contradiction", "exclusion": "Terminology or priority drifts across sections"},
+        "7.5": {"state": "Terminology and priorities are mostly stable", "delta_from_previous": "Aligns the major drift", "exclusion": "One downstream implication is disconnected"},
+        "8.0": {"state": "Decisions and direct implications align", "delta_from_previous": "Connects the orphaned implication", "exclusion": "One interaction, copy, or system choice weakens the thesis"},
+        "8.5": {"state": "Structure, behavior, language, and system choices reinforce the thesis", "delta_from_previous": "Aligns the remaining local choice", "exclusion": "A tradeoff is implied rather than declared"},
+        "9.0": {"state": "The thesis and material tradeoffs govern the artifact", "delta_from_previous": "Makes the remaining tradeoff explicit", "exclusion": "One cross-artifact dependency is hard to trace"},
+        "9.5": {"state": "Material dependencies and consequences are traceable", "delta_from_previous": "Makes the final dependency traceable", "exclusion": "Any competent reviewer could interpret a decision two ways"},
+        "10.0": {"state": "Reference-quality unity with no accidental decision", "delta_from_previous": "Eliminates the final interpretive ambiguity", "exclusion": "A senior reviewer would change any relationship or tradeoff"}
+      }
+    },
+    {
+      "id": "C-EXPERIENCE", "name": "Human experience specificity", "definition": "The artifact translates the product thesis into a distinct, governed brand and design system plus a clear, accessible, resilient experience for a defined person and moment", "excludes": ["marketing claim evidence", "technical feasibility", "mere route coverage"], "weight": 0.15, "type": "quality", "evidence_requirement": "Cite the user moment, selected design rule, brand behavior, asset role, attention order, interaction, state, recovery, or accessibility decision", "context_required": ["idea", "upstream decisions", "candidate artifact"], "critical_failure_conditions": [],
+      "anchors": {
+        "below_bar": "The artifact is generic, coercive, inaccessible, or unusable in the primary moment",
+        "7.0": {"state": "The primary person can understand and complete the main task", "delta_from_previous": "Makes the primary task legible", "exclusion": "Feedback, recovery, or adaptation is weak"},
+        "7.5": {"state": "Main-task feedback and recovery are specified", "delta_from_previous": "Adds the missing feedback or recovery", "exclusion": "Hierarchy or attention order remains generic"},
+        "8.0": {"state": "Hierarchy and interaction fit the usage moment", "delta_from_previous": "Derives structure from the actual task", "exclusion": "Accessibility or content variation is treated superficially"},
+        "8.5": {"state": "Accessibility and realistic content variation shape the experience", "delta_from_previous": "Resolves the remaining adaptation need", "exclusion": "The direction lacks one ownable product-specific move"},
+        "9.0": {"state": "The experience is clear, resilient, and recognizably specific", "delta_from_previous": "Adds an earned signature move", "exclusion": "One edge moment loses agency, trust, or tone"},
+        "9.5": {"state": "Normal and edge moments preserve agency, trust, and product character", "delta_from_previous": "Resolves the remaining weak moment", "exclusion": "Any choice could better fit the defined person and moment"},
+        "10.0": {"state": "Reference-quality fit, resilience, and distinctiveness", "delta_from_previous": "Eliminates the last context mismatch", "exclusion": "A senior product designer would change any experiential decision"}
+      }
+    },
+    {
+      "id": "C-LANGUAGE", "name": "Language and decision precision", "definition": "Copy and planning language are concrete, credible, human, line-addressable, and explicit about action and consequence", "excludes": ["visual hierarchy", "implementation feasibility", "contract field presence"], "weight": 0.15, "type": "quality", "evidence_requirement": "Quote the smallest decisive copy or planning span and name its reader job", "context_required": ["idea", "candidate artifact"], "critical_failure_conditions": [],
+      "anchors": {
+        "below_bar": "Language materially misleads, obscures action, or relies on placeholders",
+        "7.0": {"state": "The main message and action are understandable", "delta_from_previous": "Replaces misleading or placeholder language", "exclusion": "Generic claims or vague actions remain"},
+        "7.5": {"state": "Claims and actions are mostly specific", "delta_from_previous": "Clarifies the largest vague unit", "exclusion": "One important consequence or objection is buried"},
+        "8.0": {"state": "Message priority, action, and consequence are clear", "delta_from_previous": "Surfaces the buried decision information", "exclusion": "Credibility or reader fit is uneven"},
+        "8.5": {"state": "Language fits the reader and matches claim strength to proof", "delta_from_previous": "Repairs the weak credibility or fit", "exclusion": "One line is redundant, generic, or tonally accidental"},
+        "9.0": {"state": "Every material line earns attention and preserves agency", "delta_from_previous": "Removes the remaining accidental line", "exclusion": "A likely comprehension or expectation failure remains"},
+        "9.5": {"state": "Language preempts likely misunderstanding without bloat", "delta_from_previous": "Resolves the final expectation failure", "exclusion": "Any line could be clearer or more specific using supplied facts"},
+        "10.0": {"state": "Reference-quality clarity, credibility, voice, and economy", "delta_from_previous": "Eliminates the final improvable line", "exclusion": "A senior copy lead would change any material wording"}
+      }
+    },
+    {
+      "id": "C-READY", "name": "Stage readiness and verification handoff", "definition": "The artifact's declared consumer can act at the assigned planning depth without inventing a required behavior, boundary, owner, acceptance signal, or handoff", "excludes": ["whether all schema fields exist", "copy quality", "market desirability", "decisions assigned exclusively to later artifact contracts"], "weight": 0.15, "type": "quality", "evidence_requirement": "Cite the decision, dependency, owner, acceptance check, recovery rule, or explicit downstream handoff the declared consumer would use", "context_required": ["artifact contract", "upstream decisions", "stack policy", "candidate artifact"], "critical_failure_conditions": [],
+      "anchors": {
+        "below_bar": "The declared consumer must invent a material behavior, boundary, safety rule, or handoff required at this stage",
+        "7.0": {"state": "The declared consumer can identify the main output and behavior at this stage", "delta_from_previous": "Defines the missing stage-level output or behavior", "exclusion": "Ownership, dependency, failure behavior, or downstream handoff is vague"},
+        "7.5": {"state": "Main stage-level ownership, dependencies, failures, and downstream destination are identified", "delta_from_previous": "Adds the largest operational boundary or handoff", "exclusion": "Acceptance evidence or sequence remains vague"},
+        "8.0": {"state": "The stage sequence, handoff, and acceptance evidence are actionable", "delta_from_previous": "Makes verification or ordering explicit", "exclusion": "One required interface, state transition, or handoff remains implicit"},
+        "8.5": {"state": "Required interfaces, transitions, or downstream handoffs are explicit", "delta_from_previous": "Defines the remaining implicit interface, transition, or handoff", "exclusion": "A stage-level security, cost, privacy, or operability tradeoff is unowned"},
+        "9.0": {"state": "Material tradeoffs within this artifact's responsibility have owners and checks", "delta_from_previous": "Assigns the remaining stage-level risk and evidence", "exclusion": "One likely consumer question lacks an answer or governed handoff"},
+        "9.5": {"state": "Likely consumer questions are answered or explicitly handed off at the correct planning depth", "delta_from_previous": "Answers or governs the final material stage-level question", "exclusion": "Any required stage-level decision still depends on guesswork avoidable from supplied context"},
+        "10.0": {"state": "Reference-quality handoff for the artifact's declared consumer", "delta_from_previous": "Eliminates the final avoidable stage-level guess", "exclusion": "A senior downstream owner would need any unplanned decision that this artifact is responsible for"}
+      }
+    }
+  ],
+  "aggregation": {
+    "method": "weighted mean over anchor numeric values",
+    "critical_gate": "any critical below_bar or deterministic gate failure fails the artifact regardless of weighted score",
+    "rounding": "retain raw score to two decimals; display nearest 0.5 with ties away from zero",
+    "missing_evidence": "criterion insufficient_evidence; overall abstains when decision-critical"
+  },
+  "output_contract": {
+    "type": "object",
+    "additional_properties": false,
+    "required_fields": ["judge_id", "judge_version", "criterion_id", "anchor_id", "evidence", "rationale", "gap_to_next", "confidence"],
+    "required_top_level": ["judge_id", "judge_version", "verdicts"],
+    "verdict_required_fields": ["criterion_id", "anchor_id", "evidence", "rationale", "gap_to_next", "confidence"],
+    "evidence_type": "non-empty array of non-empty strings",
+    "repair_limit": 1,
+    "repair_scope": "contract shape only; preserve semantic anchors and evidence meaning"
+  },
+  "calibration": {
+    "dataset_id": "product-planning-v1-unbuilt",
+    "development_count": 0,
+    "holdout_count": 0,
+    "metrics": ["exact_agreement", "within_0.5", "weighted_kappa", "critical_false_pass_rate", "repeat_variance"],
+    "thresholds": ["predeclare after assembling independent human labels and before opening holdout"],
+    "bias_probes": ["length", "format", "generator family", "confident tone", "decorative detail"],
+    "holdout_policy": "Do not call the judge accurate or promoted until a locked holdout clears predeclared thresholds"
+  },
+  "provenance": {
+    "prompt_hash": "e7f6f98cf5d0ff173aa136a0b8b57493517bc6235d7928aed5cebf68676f85ef",
+    "model": "openai-codex/gpt-5.6-terra",
+    "thinking": "high for milestone artifacts; medium for lane, page-plan, and copy-pack throughput",
+    "runtime": "clean-context Pi JSON subprocess with no tools; page and copy contexts use digest-bound page-copy-v1 projections"
+  },
+  "changelog": [
+    {"version": "1.0.0", "changed_refs": [], "motivation": "establish the first planning-package rubric", "expected_effect": "make pre-code product planning explicit, comparable, and repairable", "evidence": "structurally validated but not human-calibrated", "decision": "candidate"},
+    {"version": "1.1.0", "changed_refs": ["C-COMPLETE", "C-COHERENCE", "C-EXPERIENCE", "C-READY"], "motivation": "make design, brand, asset, framework, and Cloudflare-first stack decisions first-class judged planning artifacts", "expected_effect": "prevent page and architecture plans from inventing visual or platform decisions downstream", "evidence": "contract and fixture coverage added; judge remains uncalibrated", "decision": "candidate"},
+    {"version": "1.2.0", "changed_refs": ["C-COMPLETE", "C-COHERENCE"], "motivation": "make audience language, messaging architecture, claims, copy slots, copy consistency, and copy testing first-class planning artifacts", "expected_effect": "prevent exact copy from being drafted without reader, evidence, action, state, and validation contracts", "evidence": "copy-specific deterministic gates, candidate judge, fixtures, and visibility artifacts added; both judges remain uncalibrated", "decision": "candidate"},
+    {"version": "1.2.1", "changed_refs": [], "motivation": "a live Pi verdict encoded evidence as a string and failed the mechanical judge contract", "expected_effect": "bind exact field types and allow one contract-only repair without changing semantic scores", "evidence": "Receptionist.Team live run regression plus deterministic contract tests; no calibration labels added", "decision": "candidate"},
+    {"version": "1.2.2", "changed_refs": [], "motivation": "the observed malformed verdict can be repaired losslessly without another model call", "expected_effect": "lift repeated exact judge identity and wrap non-empty string evidence mechanically before the one-shot model-repair fallback", "evidence": "deterministic replay of the Receptionist.Team failure shape; no calibration labels added", "decision": "candidate"},
+    {"version": "1.3.0", "changed_refs": [], "motivation": "bind judgments to the prompt package that adds exact model-availability preflight", "expected_effect": "fail before expensive generation when a configured model route is unavailable; semantic criteria and anchors are unchanged", "evidence": "controller and prompt-contract tests; no calibration labels added", "decision": "candidate"},
+    {"version": "1.4.0", "changed_refs": ["C-READY"], "motivation": "the live Receptionist.Team run penalized an early brief for framework and interface decisions assigned to later deterministic stages", "expected_effect": "judge intermediate artifacts on complete stage handoff while preserving final implementation-readiness requirements for final artifacts", "evidence": "failed live baseline 8.92 to 9.20 with C-READY at 8.0; candidate revalidation required and no calibration labels added", "decision": "candidate"},
+    {"version": "1.5.0", "changed_refs": [], "motivation": "live E2E evidence showed high-thinking Sol judging and full page context dominated latency", "expected_effect": "use Terra high at milestones, Terra medium for high-volume judgments, and digest-bound relevant context without changing semantic criteria", "evidence": "controller tests and a new live E2E are required; no calibration labels added", "decision": "candidate"},
+    {"version": "1.6.0", "changed_refs": ["C-COHERENCE", "C-READY"], "motivation": "the prior final package could report unresolved high-severity contradictions and still pass implementation readiness", "expected_effect": "make market and pricing hypotheses, sitemap, build-approved copy, and exact coherence closure first-class final-readiness evidence", "evidence": "deterministic contract and end-to-end fixture validation required; no calibration labels added", "decision": "candidate"},
+    {"version": "1.6.1", "changed_refs": [], "motivation": "full copy-approval re-emission made Luna spend minutes reproducing unchanged controls", "expected_effect": "bind the judge to a patch-oriented prompt while the deterministic controller assembles the same full verified package", "evidence": "timed live regression and controller tests required; semantic criteria unchanged and no calibration labels added", "decision": "candidate"},
+    {"version": "1.6.2", "changed_refs": [], "motivation": "the first v2 live judge saw upstream candidate copy but not the canonical assembled approval evidence", "expected_effect": "judge final readiness from canonical precedence, exact repair deltas, and mechanically verified route, state, control, and issue coverage", "evidence": "sealed live baseline scored 8.25 from missing projection evidence; replay required and no calibration labels added", "decision": "candidate"},
+    {"version": "1.6.3", "changed_refs": [], "motivation": "bind judgments to the prompt package adding source-linked competitor research and a mechanically complete brand-deck artifact", "expected_effect": "preserve the rubric while exposing competitive evidence and brand decisions to downstream planning", "evidence": "controller fixtures and a new live replay required; no calibration labels added", "decision": "candidate"}
+  ]
+}

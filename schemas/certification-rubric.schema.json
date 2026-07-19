@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.codex/certification-rubric.schema.json",
+  "title": "Independent workflow judge rubric",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "judge_id", "instructions", "criteria"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "judge_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "instructions": {"type": "string", "minLength": 1},
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "dimension", "description", "weight", "anchors"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "dimension": {"enum": ["truth", "eval_quality", "cost_efficiency", "integration", "safety"]},
+          "description": {"type": "string", "minLength": 1},
+          "weight": {"type": "number", "exclusiveMinimum": 0},
+          "anchors": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["0", "5", "10"],
+            "properties": {
+              "0": {"type": "string", "minLength": 1},
+              "5": {"type": "string", "minLength": 1},
+              "10": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

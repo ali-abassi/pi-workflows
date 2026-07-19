@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.1",
+  "workflow": "conditional-pr-review",
+  "version": "1.0.0",
+  "description": "Route an immutable pull-request snapshot into a bounded review path and verify the resulting review artifact.",
+  "effect": "read_only",
+  "runtime": {"kind": "specialized", "entrypoint": "scripts/run.py"},
+  "objective_contract": {
+    "selector": "one declared pull-request snapshot",
+    "target": "the changed code and its observable risks",
+    "decision": "which review path applies and which verified findings should be reported",
+    "non_goals": ["post a GitHub review", "modify the pull request", "let a model select its own route"]
+  },
+  "lifecycle": ["select", "classify", "lightweight-review", "full-review", "chunked-review", "verify", "report", "blocked"],
+  "control_flow": {
+    "initial_stage": "select",
+    "terminal_stages": ["report", "blocked"],
+    "max_transitions": 8,
+    "max_visits_per_stage": {},
+    "on_exhausted": "blocked",
+    "transitions": [
+      {"id": "selected", "from": "select", "to": "classify", "priority": 100, "default": true},
+      {"id": "docs-route", "from": "classify", "to": "lightweight-review", "priority": 10, "when": {"op": "equals", "path": "/change_type", "value": "docs-only"}},
+      {"id": "large-route", "from": "classify", "to": "chunked-review", "priority": 20, "when": {"op": "greater_than", "path": "/diff_lines", "value": 5000}},
+      {"id": "code-route", "from": "classify", "to": "full-review", "priority": 30, "when": {"op": "equals", "path": "/change_type", "value": "code"}},
+      {"id": "unknown-route", "from": "classify", "to": "blocked", "priority": 100, "default": true},
+      {"id": "light-review-done", "from": "lightweight-review", "to": "verify", "priority": 100, "default": true},
+      {"id": "full-review-done", "from": "full-review", "to": "verify", "priority": 100, "default": true},
+      {"id": "chunk-review-done", "from": "chunked-review", "to": "verify", "priority": 100, "default": true},
+      {"id": "verified", "from": "verify", "to": "report", "priority": 10, "when": {"op": "equals", "path": "/mechanical_verification", "value": "passed"}},
+      {"id": "verification-blocked", "from": "verify", "to": "blocked", "priority": 100, "default": true}
+    ]
+  },
+  "acceptance_criteria": [
+    {"id": "review-exists", "description": "review.json exists"},
+    {"id": "route-recorded", "description": "review.json names the mechanically selected route"}
+  ],
+  "verifiers": [
+    {
+      "id": "verify-review",
+      "covers": ["review-exists", "route-recorded"],
+      "command": ["python3", "-c", "import json; from pathlib import Path; value=json.loads(Path('review.json').read_text()); assert value['route'] in {'lightweight-review','full-review','chunked-review'}"],
+      "timeout_seconds": 30
+    }
+  ],
+  "task_template": {
+    "task_id": "pr-review-fixture-001",
+    "objective": "Classify and review the immutable pull-request snapshot using only the mechanically selected branch.",
+    "inputs": ["pr.json"],
+    "immutable_paths": ["pr.json"],
+    "allowed_write_paths": [],
+    "constraints": ["Do not modify the pull request snapshot", "Do not trust a model-emitted next_stage field"],
+    "fixture_files": {"pr.json": "{\"number\":42,\"change_type\":\"code\",\"diff_lines\":640}\n"}
+  },
+  "context_policy": {"strategy": "full", "max_input_bytes": 1000000},
+  "operations": {
+    "owner": "review-operator",
+    "concurrency": "read_only_shared",
+    "retention_days": 30,
+    "redact_patterns": ["authorization", "token"],
+    "failure_response": "Inspect the routing failure or verifier artifact; never bypass the default blocked route."
+  }
+}

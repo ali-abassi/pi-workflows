@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "fixture-001",
+      "baseline_spec": "examples/task.json",
+      "candidate_spec": "examples/task.json"
+    }
+  ]
+}

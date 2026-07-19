@@ -1,0 +1,39 @@
+{
+  "name": "pi-workflows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic DAG workflows for Pi, Agent X, Codex, and Claude Code",
+  "keywords": [
+    "pi-package",
+    "coding-agent",
+    "deterministic-workflow"
+  ],
+  "type": "module",
+  "bin": {
+    "piw": "./bin/piw"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/pi-workflows.ts"
+    ],
+    "skills": [
+      "./SKILL.md"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.80.10",
+    "@earendil-works/pi-coding-agent": "^0.80.10",
+    "typebox": "^1.1.24",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test:extension": "node --experimental-strip-types --test extensions/pi-workflows.test.mjs",
+    "test": ".venv/bin/python -m unittest discover -s tests -v && npm run test:extension"
+  }
+}

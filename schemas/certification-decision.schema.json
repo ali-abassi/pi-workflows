@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.codex/certification-decision.schema.json",
+  "title": "Explicit workflow promotion decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision", "operator", "rationale", "workflow", "candidate_version", "results_digest", "contract_digest", "decided_at"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "decision": {"enum": ["promote", "reject"]},
+    "operator": {"type": "string", "minLength": 1},
+    "rationale": {"type": "string", "minLength": 10},
+    "workflow": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "candidate_version": {"type": "string"},
+    "results_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decided_at": {"type": "string", "format": "date-time"}
+  }
+}

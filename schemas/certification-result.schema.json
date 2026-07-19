@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.codex/certification-result.schema.json",
+  "title": "Workflow certification case results",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "workflow", "version", "contract_digest", "corpus_digest", "rubric_digests", "validator", "cases"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "workflow": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "version": {"type": "string"},
+    "contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "corpus_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "rubric_digests": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"},
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["independent", "provider", "model", "run_id", "executed_at"],
+      "properties": {
+        "independent": {"const": true},
+        "provider": {"type": "string", "minLength": 1},
+        "model": {"type": "string", "minLength": 1},
+        "run_id": {"type": "string", "minLength": 1},
+        "executed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "deterministic_gates", "judge_results", "cost", "latency_ms", "evidence"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "deterministic_gates": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "boolean"}},
+          "judge_results": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"},
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "criterion_scores", "rubric_digest", "artifact_path", "artifact_digest", "evidence"],
+              "properties": {
+                "score": {"type": "number", "minimum": 0, "maximum": 10},
+                "criterion_scores": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"},
+                  "additionalProperties": {"type": "number", "minimum": 0, "maximum": 10}
+                },
+                "rubric_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "artifact_path": {"type": "string", "pattern": "^[^/].*"},
+                "artifact_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "evidence": {"type": "object", "minProperties": 1}
+              }
+            }
+          },
+          "cost": {"type": "number", "minimum": 0},
+          "latency_ms": {"type": "number", "minimum": 0},
+          "evidence": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "pattern": "^[^/].*"},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
