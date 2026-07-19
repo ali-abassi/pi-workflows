@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a shared agent operating contract to `SKILL.md` and `AGENTS.md`: when
+  to use a workflow, the required inspect/improve/evaluate loop, promotion
+  evidence, scale controls, failure behavior, and an explicit definition of done.
 - Added focused node inspection with `piw detail --step`, deterministic run
   comparison with `piw compare`, and CLI configuration for per-node QA judges.
 - Fixed run lookup so an exact run id wins over a newer run that merely shares

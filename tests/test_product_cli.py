@@ -18,6 +18,19 @@ CLI = ROOT / "scripts" / "piw.py"
 
 
 class ProductCliTests(unittest.TestCase):
+    def test_agent_guides_expose_the_complete_operating_loop(self) -> None:
+        required = [
+            "piw actions", "piw validate", "piw run", "piw detail", "--step",
+            "piw set", "--judge-prompt-file", "piw compare", "piw eval",
+            "piw batch", "--max-cost", "--output-step",
+        ]
+        for guide in (ROOT / "SKILL.md", ROOT / "AGENTS.md"):
+            text = guide.read_text(encoding="utf-8")
+            for command in required:
+                self.assertIn(command, text, f"{guide.name} omits {command}")
+            self.assertIn("one-step task", text)
+            self.assertIn("Done means", text)
+
     def test_agent_can_inspect_one_node_compare_runs_and_configure_node_qa(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

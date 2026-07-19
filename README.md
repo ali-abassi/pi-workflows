@@ -56,6 +56,9 @@ piw compare review/steps.yaml BASELINE_RUN CANDIDATE_RUN
 
 > Independent community project; not an official Pi project.
 
+Agent instructions: [`SKILL.md`](SKILL.md) for using the installed product ·
+[`AGENTS.md`](AGENTS.md) for working inside this repository.
+
 ## Where it shines: one exact workflow, 1,000 items
 
 This is the primary use case. Tell an agent, “run these five steps exactly for
