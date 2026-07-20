@@ -12,7 +12,7 @@ authors = [{ name = "Ali Abassi" }]
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6,<7",
-    "ruamel.yaml>=0.18,<0.19",
+    "ruamel.yaml>=0.18,<0.20",
     "jsonschema>=4.23,<5",
 ]
 
