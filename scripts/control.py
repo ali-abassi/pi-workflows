@@ -57,14 +57,8 @@ def scan_roots() -> list[Path]:
     if override:
         roots = [Path(part).expanduser() for part in override.split(os.pathsep) if part]
     else:
-        agent = Path.home() / "Agent"
         project = _project_root(Path.cwd())
         roots = [
-            agent / "experiments",
-            agent / "projects",
-            agent / "optimizers",
-            agent / "workflow-blueprints",
-            agent / ".codex" / "workflows",
             PRODUCT_ROOT / "examples",
             PRODUCT_ROOT / "templates",
             *_registry_roots(),

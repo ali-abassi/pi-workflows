@@ -162,13 +162,5 @@ Open `report.md` for the summary and optimization findings. Every row links to
 the underlying `log.md` and `ledger.json`; each copied workflow retains its run
 artifacts, rejected attempts, QA report, and git history.
 
-The accepted v0.1.1 measurements and the observability defect they exposed are
-documented in [`docs/example-certification.md`](../docs/example-certification.md).
-
-## Advanced factory blueprints
-
-The JSON files at the root of this directory are inputs and fixtures for the
-opt-in production workflow factory. They demonstrate digest-bound approvals,
-conditional graphs, replay corpora, bounded peer collaboration, and the
-specialized product-planning harness. Start with the runnable YAML workflows;
-use the factory only when the heavier guarantees are actually required.
+`catalog.json` indexes the reusable actions that `piw actions` and `piw add`
+expand into ordinary workflow nodes.

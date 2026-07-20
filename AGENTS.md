@@ -1,8 +1,8 @@
 # pi workflows
 
 pi workflows is the canonical source for the deterministic workflow product.
-Agent X, Codex, Claude Code, and Loops are integrations; none of them owns the
-runner, workflow schema, CLI contract, or agent skill.
+Codex, Claude Code, and any other agent harness are integrations; none of them
+owns the runner, workflow schema, CLI contract, or agent skill.
 
 ## If you are using pi workflows
 
@@ -71,8 +71,8 @@ completion and cost claim.
   explicit and inspectable.
 - Workflow inputs are immutable per run. Concurrent runs must never share an
   input staging file.
-- The product works without Agent X or Loops. Optional integrations may add a
-  TUI tool, a visual graph, and durable scheduling without changing semantics.
+- The product works with no integration installed. An optional harness may add
+  a TUI tool, a visual graph, or durable scheduling without changing semantics.
 - Keep prompts compact. Use deterministic checks for schemas, routes, gates,
   budgets, permissions, and completion.
 

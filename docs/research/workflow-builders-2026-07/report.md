@@ -169,7 +169,7 @@ routing as the highest-value direction; it added no new high-priority primitive.
 The claim-level ledger is [`evidence.jsonl`](evidence.jsonl). It is audited with:
 
 ```bash
-python3 /Users/aliabassi/.codex/skills/deep-research/scripts/audit_evidence.py \
+python3 scripts/audit_evidence.py \
   docs/research/workflow-builders-2026-07/evidence.jsonl --require-primary
 ```
 

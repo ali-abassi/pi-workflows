@@ -22,11 +22,11 @@ package. A direct `pi install` can discover the TypeScript adapter, but it does
 not provision the Python virtual environment and is therefore not the supported
 standalone installation path.
 
-## Agent X
+## Custom agent harnesses
 
-Agent X exposes its own compact `workflows` tool because it has custom terminal
-rendering and already owns a curated prompt surface. It invokes the same `piw`
-CLI. Agent X must not contain a second runner or workflow schema.
+A harness with its own terminal rendering may expose a compact `workflows` tool
+of its own, but it must invoke the same `piw` CLI. No integration may contain a
+second runner or a second workflow schema.
 
 ## Codex
 
@@ -40,12 +40,17 @@ The installer links this repository into `~/.claude/skills/pi-workflows`.
 Claude Code follows supported skill-directory symlinks. Deterministic lifecycle
 hooks remain optional; workflow control flow stays in the runner, not in a hook.
 
-## Loops
+## Scheduler adapter (optional, not bundled)
 
-Loops provides the localhost API, graph/configuration canvas, live run events,
-and launchd-backed triggers. It resolves the installed Pi Workflows runner and
-returns the exact event path for a started run. Pi Workflows may fall back to a
-direct run when Loops is absent or resolves a different workflow path.
+`piw schedule`, `piw automations`, and `piw automation` delegate to an external
+scheduler binary on `PATH`. No such scheduler ships with this repository, so
+those three commands are inert on a stock install and report that the adapter
+is missing; every other command, including `piw batch`, works without one.
+
+An adapter is expected to provide a localhost API, a graph canvas, live run
+events, and durable triggers. It resolves the installed runner and returns the
+event path for a started run. pi workflows falls back to a direct run when the
+adapter is absent or resolves a different workflow path.
 
 ## Compatibility
 

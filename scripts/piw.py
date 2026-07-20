@@ -795,6 +795,7 @@ def follow(
     started: dict[str, float] = {}
     totals = {"cost": 0.0, "tokens": 0, "passed": 0, "failed": 0, "cached": 0, "skipped": 0}
     run_dir = ""
+    drained = False
     deadline = time.monotonic() + timeout
     width = 12
 
@@ -861,7 +862,16 @@ def follow(
             elif kind == "run_end":
                 return bool(event.get("ok")), {**totals, "run_dir": run_dir, "failed_ids": event.get("failed") or []}
         if process is not None and process.poll() is not None:
-            return False, {**totals, "run_dir": run_dir, "failed_ids": ["<runner-exited>"]}
+            if not drained:
+                # The runner may have written run_end between our last read and
+                # this poll. Drain the stream once more before calling it dead.
+                drained = True
+                continue
+            detail = ""
+            if process.stderr is not None:
+                detail = (process.stderr.read() or "").strip()
+            return False, {**totals, "run_dir": run_dir,
+                           "failed_ids": ["<runner-exited>"], "error": detail}
         time.sleep(0.2)
 
     return False, {**totals, "run_dir": run_dir, "failed_ids": ["<timeout>"]}
@@ -911,9 +921,17 @@ def cmd_run(args) -> int:
         "run_dir": totals["run_dir"],
         "failed_ids": totals["failed_ids"],
     }
+    # The runner's own message is the actionable part of a startup failure;
+    # "<runner-exited>" alone tells the user nothing.
+    error = str(totals.get("error") or "").strip()
+    if error:
+        summary["error"] = error
     if args.json:
         out(json.dumps(summary, separators=(",", ":")))
     else:
+        if error:
+            for line in error.splitlines():
+                print(f"error: {line}", file=sys.stderr)
         verdict = "RUN ok" if ok else f"RUN FAILED {','.join(summary['failed_ids'])}"
         out(f"{verdict} · {totals['passed']} passed"
             + (f", {totals['failed']} failed" if totals["failed"] else "")
@@ -1529,7 +1547,7 @@ def cmd_doctor(args) -> int:
     def check(name: str, ok: bool, detail: str, required: bool = True) -> None:
         checks.append({"name": name, "ok": bool(ok), "required": required, "detail": detail})
 
-    check("python", sys.version_info >= (3, 11), sys.version.split()[0])
+    check("python", sys.version_info >= (3, 10), sys.version.split()[0])
     try:
         import jsonschema  # type: ignore[import-not-found]  # noqa: F401
         import ruamel.yaml  # type: ignore[import-not-found]  # noqa: F401
@@ -1713,7 +1731,11 @@ def cmd_create(args) -> int:
 def _run_loops(args: list[str]) -> subprocess.CompletedProcess[str]:
     executable = shutil.which("loops")
     if not executable:
-        raise RuntimeError("Loops is not installed; core workflows still run, but scheduling requires the Loops adapter")
+        raise RuntimeError(
+            "no scheduler adapter found on PATH. Scheduling is an optional "
+            "integration that is not bundled with pi workflows; every other "
+            "command, including `piw batch`, works without one."
+        )
     return subprocess.run([executable, *args], capture_output=True, text=True, timeout=30, check=False)
 
 

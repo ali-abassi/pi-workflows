@@ -88,10 +88,10 @@ native.
 
 | Candidate | Required contract before release | Safe v1 approach |
 |---|---|---|
-| Human checkpoint | durable request id, explicit approver, timeout, resume token, immutable artifact digest | Loops approval boundary or a gated command |
+| Human checkpoint | durable request id, explicit approver, timeout, resume token, immutable artifact digest | An external approval adapter or a gated command |
 | Subworkflow | pinned workflow path/version, input/output mapping, child run id, failure propagation, recursion limit | invoke a validated `piw run --json` from a command node |
 | Dynamic map | typed collection input, per-item identity, concurrency and spend ceilings, stable fan-in order | compile a static graph with the workflow factory |
-| External event wait | durable subscription id, deadline, deduplication, cancellation, replay proof | Loops schedule/event adapter |
+| External event wait | durable subscription id, deadline, deduplication, cancellation, replay proof | An external schedule/event adapter |
 | Compensation | idempotency key, declared side effects, reverse order, retry policy, evidence | explicit command nodes with effect-specific gates |
 | Native sandbox policy | filesystem, process, network, and credential capabilities enforced below Pi | run the workflow in a container or OS sandbox |
 

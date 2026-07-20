@@ -593,8 +593,8 @@ class WhenError(RuntimeError):
     """A `when:` condition could not be evaluated (bad grammar or unreadable source)."""
 
 
-# Condition vocabulary, kept identical to scripts/evaluate_transition.py so the two
-# conditional surfaces in this skill speak one language.
+# Condition vocabulary for `when:`. Kept deliberately small and explicit so a
+# reader can tell what will run without executing anything.
 _LEAF_OPS = {
     "exists", "missing", "type_is", "equals", "not_equals",
     "less_than", "less_than_or_equal", "greater_than", "greater_than_or_equal",

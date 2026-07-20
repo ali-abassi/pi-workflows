@@ -192,7 +192,26 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(HTTPStatus.OK, path.read_bytes(), content_type)
 
+    def _host_ok(self) -> bool:
+        """Reject DNS rebinding.
+
+        Binding to 127.0.0.1 does not help once an attacker's domain resolves
+        there: their page becomes same-origin, so SOP and CSP stop applying and
+        `GET /` would hand out the run token. Only a Host check survives that.
+        """
+        host = self.headers.get("Host", "")
+        if host.startswith("[") and "]" in host:      # [::1] or [::1]:8787
+            name = host[1:host.index("]")]
+        else:                                          # localhost or 127.0.0.1:8787
+            name = host.split(":", 1)[0]
+        if name in {"127.0.0.1", "localhost", "::1"}:
+            return True
+        self._json(HTTPStatus.FORBIDDEN, {"error": "invalid Host header"})
+        return False
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+        if not self._host_ok():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/":
             boot = json.dumps({
@@ -222,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+        if not self._host_ok():
+            return
         if urlparse(self.path).path != "/api/run":
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return

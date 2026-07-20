@@ -74,7 +74,7 @@ Before writing any yaml, answer these from the user's request (infer where obvio
 4. **Cost/model policy:** which steps deserve a strong model? Default cheap (`luna`), pin up (`sol`) only for reasoning/synthesis nodes; judges/QA on a different model than generators.
 5. **Failure policy:** what should happen when a step can't pass — halt (default), keep-best, or human checkpoint?
 6. **Externalities:** web research, APIs, repo mutation? Those become `cmd:` steps (controller-owned, keys never in model context) or `agent: true` steps with effect-gates.
-7. **Trigger:** manual, interval, or daily? Scheduling belongs to Loops; the workflow remains independently runnable.
+7. **Trigger:** manual, interval, or daily? Scheduling delegates to an optional external adapter that is not bundled; the workflow remains independently runnable.
 
 One paragraph of these answers is the workflow contract. Then build.
 
@@ -183,6 +183,6 @@ Mechanics (the load-bearing rules):
 7. **Hill-climb prompts per `$improvement`:** freeze the judge, gates, and corpus; mutate prompts or `system:` one mechanism at a time; use paired no-cache runs and keep-or-revert with the run artifacts as evidence. Never tune the evaluator and candidate together.
 8. **Automate only after proof:** `piw schedule <workflow> --interval-minutes N` or `--daily HH:MM`. Inspect with `piw automations`; pause, resume, run, or delete with `piw automation <action> <id>`.
 
-## Heavy route: production workflow factory (opt-in only)
-
-Only when the user explicitly asks for a **production, at-scale mutation workflow** with digest-bound approvals, certification fixtures, replay comparison, and version promotion: `scripts/draft_workflow_blueprint.py` → `compile_workflow.py` → `certify_workflow.py`, contracts in `references/workflow-factory.md` (also: conditional control-flow graphs, `references/peer-collaboration.md`, `references/product-planning-harness.md`). Never route a normal "don't skip steps" request through the factory.
+Everything above is the whole product. There is no second, heavier path to
+escalate to: if a request cannot be expressed as nodes, gates, and QA in
+`steps.yaml`, say so rather than reaching for machinery that is not here.

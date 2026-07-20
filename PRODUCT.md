@@ -10,8 +10,8 @@ probabilistic.
 - A coding agent creates, validates, runs, inspects, and improves a workflow.
 - An operator understands the graph, configuration, live state, artifacts,
   cost, and failure without reading implementation code.
-- Agent X can invoke one workflow during a task or schedule it as a durable
-  automation through Loops.
+- An agent harness can invoke one workflow during a task, or hand it to an
+  external scheduler as a durable automation.
 - An agent can freeze one graph and run it over hundreds or thousands of inputs
   without owning the queue or remembering which items finished.
 
@@ -37,9 +37,9 @@ probabilistic.
    Pi Workflows installation.
 8. Codex and Claude Code skills — one shared `SKILL.md`, discovered from their
    documented user skill locations.
-9. Loops adapter — shared graph/configuration display, live events, run
-   inspection, and durable schedules. Loops owns scheduling; Pi Workflows owns
-   workflow semantics.
+9. Scheduler adapter — an optional external service may add durable schedules
+   and a live run canvas. The scheduler owns triggering; pi workflows owns
+   workflow semantics. No scheduler is bundled with this repository.
 
 ## Definition of excellent
 
@@ -75,4 +75,4 @@ probabilistic.
 - Pretending model generations are deterministic.
 - Replacing ordinary scripts for tasks that do not benefit from a graph.
 - Letting the visual editor become a second source of workflow truth.
-- Requiring Agent X, Loops, Codex, or Claude Code for core execution.
+- Requiring any agent harness or scheduler for core execution.

@@ -3,7 +3,6 @@
 .venv/
 node_modules/
 tests/
-research/
 examples/.artifacts/
 **/runs/
 **/cache/

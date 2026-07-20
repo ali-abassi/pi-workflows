@@ -93,6 +93,70 @@ class WorkflowUiTests(unittest.TestCase):
                 if process.stderr:
                     process.stderr.close()
 
+    def test_studio_refuses_a_rebound_host_and_never_leaks_the_run_token(self) -> None:
+        """Binding to 127.0.0.1 does not stop DNS rebinding.
+
+        Once an attacker domain resolves to loopback their page is same-origin,
+        so SOP and CSP no longer apply and `GET /` would hand out the token that
+        authorizes `POST /api/run` — which spends money and runs shell steps.
+        Only a Host check stops it.
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            workflow = Path(raw)
+            steps = workflow / "steps.yaml"
+            steps.write_text(yaml.safe_dump({
+                "version": 1,
+                "workflow": "host-guard",
+                "input": {"required": True, "description": "Name"},
+                "steps": [{"id": "copy", "cmd": 'cat "$INPUT"', "gate": 'test -s "$OUT"'}],
+            }, sort_keys=False), encoding="utf-8")
+            env = {**os.environ, "PI_WORKFLOWS_ROOTS": raw, "LOOPS_PORT": "1"}
+            process = subprocess.Popen(
+                [sys.executable, str(SERVER), str(steps), "--port", "0"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+            )
+            try:
+                assert process.stdout is not None
+                line = process.stdout.readline().strip()
+                base = re.search(r"(http://127\.0\.0\.1:\d+)$", line).group(1)
+                port = base.rsplit(":", 1)[1]
+
+                for host in ("evil.example", f"evil.example:{port}", "attacker.test"):
+                    request = urllib.request.Request(base, headers={"Host": host})
+                    with self.assertRaises(urllib.error.HTTPError) as caught:
+                        urllib.request.urlopen(request, timeout=5)
+                    self.assertEqual(caught.exception.code, 403, host)
+                    self.assertNotIn("token", caught.exception.read().decode(), host)
+
+                # A rebound origin must not reach the endpoint that spends money.
+                run = urllib.request.Request(
+                    f"{base}/api/run",
+                    data=json.dumps({"content": "Ada"}).encode(),
+                    headers={"Content-Type": "application/json",
+                             "X-Piw-Token": "irrelevant", "Host": "evil.example"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(run, timeout=5)
+                self.assertEqual(caught.exception.code, 403)
+
+                # The legitimate loopback names still work and still boot.
+                for host in (f"127.0.0.1:{port}", f"localhost:{port}"):
+                    request = urllib.request.Request(base, headers={"Host": host})
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        self.assertEqual(response.status, 200, host)
+                        self.assertIn("piw-boot", response.read().decode(), host)
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
+
 
 if __name__ == "__main__":
     unittest.main()
