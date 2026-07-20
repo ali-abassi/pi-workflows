@@ -21,7 +21,7 @@ skip a step, and every run leaves per-node evidence.
 ```bash
 piw create review --action parallel-review     # agent scaffolds a valid graph
 piw run review/steps.yaml --input-file task.md # code owns the order
-piw detail review/steps.yaml RUN_ID --step verdict --io   # inspect one node
+piw detail review/steps.yaml RUN_ID --step parallel-review-verdict --io
 ```
 
 > Independent community project; not an official Pi project.
@@ -33,19 +33,24 @@ talks to model providers, so you authenticate once with Pi and every workflow
 inherits it. You bring your own account; pi workflows never asks for a key.
 
 ```bash
-# 1. Install Pi (the model runtime) and authenticate the provider you pay for
+# 1. Install Pi (the model runtime)
 npm install -g @earendil-works/pi-coding-agent
-pi                     # sign in when prompted, then /exit
 
-# 2. Install pi workflows
+# 2. Authenticate the provider you already pay for
+pi
+/login          # pick your provider, then /exit
+                # (or export an API key instead, e.g. ANTHROPIC_API_KEY)
+
+# 3. Install pi workflows
 git clone https://github.com/ali-abassi/pi-workflows.git
 cd pi-workflows && ./install.sh
 
-# 3. Confirm the whole chain is wired up
-piw doctor
+# 4. Confirm the whole chain is wired up
+piw doctor      # run this from any directory except the clone
 ```
 
-Requirements: macOS or Linux, Python 3.10+, Node.js 20+.
+Requirements: macOS or Linux, Python 3.10+, Node.js 22+ (the extension tests use
+`--experimental-strip-types`).
 
 `pi --list-models` prints every model id your account can reach. A node pins one
 of them as `provider/id`:
@@ -54,11 +59,22 @@ of them as `provider/id`:
 model: openai-codex/gpt-5.6-luna    # whatever `pi --list-models` shows
 ```
 
-If the provider serves a different model than the node pinned, the step
-**fails** rather than returning another model's answer quietly.
+**Pin a model your own account can serve.** Scaffolds default to
+`openai-codex/*`; if you authenticated a different provider, pass
+`--model` to `piw create` or edit the `model:` line. If the provider serves a
+different model than the node pinned, the step **fails** rather than returning
+another model's answer quietly.
 
-`./install.sh` also links this repo as a skill for Claude Code and Codex, so
-those agents can author, run, and inspect graphs without being told how.
+`./install.sh` installs a copy to `~/.pi-workflows`, links `piw` into
+`~/.local/bin`, links the skill for Claude Code and Codex so those agents can
+author and run graphs without being told how, and — when Pi is on PATH —
+registers the Pi package, which writes to `~/.pi/agent/settings.json`.
+`./install.sh --uninstall` reverses all of it.
+
+Because it installs a *copy*, `piw` from your PATH runs `~/.pi-workflows`, not
+your clone. Editing the clone changes nothing until you re-run `./install.sh`.
+Running `./bin/piw doctor` from inside the clone reports the package check as
+failed for that reason — use `piw doctor` instead.
 
 ## Why a graph instead of just asking the agent
 
@@ -116,9 +132,23 @@ and the corpus; `--resume` fails closed if either changed.
 | [`docs/workflow-format.md`](docs/workflow-format.md) | Every `steps.yaml` field |
 | [`docs/node-system.md`](docs/node-system.md) | Node kinds, gates, routing, QA |
 | [`docs/actions.md`](docs/actions.md) | Reusable action templates |
+| [`docs/integration-contract.md`](docs/integration-contract.md) | How agent harnesses and schedulers plug in |
 | [`examples/`](examples/) | Runnable workflows, simplest first |
 | [`SKILL.md`](SKILL.md) | Instructions for an agent using the product |
 | [`AGENTS.md`](AGENTS.md) | Instructions for working inside this repo |
+
+### Configuration
+
+| Variable | Effect |
+|---|---|
+| `PI_WORKFLOWS_ROOTS` | `PATH`-style list of directories to discover workflows in |
+| `PI_WORKFLOWS_HOME` | Install location (default `~/.pi-workflows`) |
+| `PI_WORKFLOWS_BIN_DIR` | Where `piw` is linked (default `~/.local/bin`) |
+| `PI_WORKFLOWS_PYTHON` | Interpreter `bin/piw` runs |
+| `PI_WORKFLOWS_MODEL` · `PI_WORKFLOWS_QA_MODEL` | Defaults used by `piw create` |
+
+Workflows are discovered under the current project and the installed examples.
+Point `PI_WORKFLOWS_ROOTS` at your own directory to keep graphs elsewhere.
 
 `piw --help` lists every command; `piw schema --json` prints the full authoring
 contract. The optional local Studio (`piw ui`) is a graph runner and flight

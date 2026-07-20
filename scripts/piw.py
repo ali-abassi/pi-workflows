@@ -2,7 +2,7 @@
 
 Built for agents as much as humans: every command prints compact, greppable
 lines rather than verbose JSON, and every command takes --json when a machine
-wants structure. Exit codes are meaningful, so `pygraph run x && ...` works.
+wants structure. Exit codes are meaningful, so `piw run x && ...` works.
 
 The full loop an agent needs:
 
@@ -44,10 +44,10 @@ from typing import Any
 
 import yaml
 
-import control as loopd
+import control
 import graph as pygraph
 
-DAEMON = f"http://127.0.0.1:{loopd.DEFAULT_PORT}"
+DAEMON = f"http://127.0.0.1:{control.DEFAULT_PORT}"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "workflow.schema.json"
 ACTION_DIR = Path(__file__).resolve().parent.parent / "actions"
 ACTION_REF_RE = re.compile(r"\{step\.([A-Za-z0-9_-]+)\}")
@@ -81,7 +81,7 @@ def resolve(identifier: str) -> dict[str, Any] | None:
         path = (candidate / "steps.yaml" if candidate.is_dir() else candidate).resolve()
         if path.name != "steps.yaml" or not path.is_file():
             return None
-        known = next((item for item in loopd.discover_workflows() if item["path"] == str(path)), None)
+        known = next((item for item in control.discover_workflows() if item["path"] == str(path)), None)
         if known:
             return known
         try:
@@ -91,7 +91,7 @@ def resolve(identifier: str) -> dict[str, Any] | None:
         runs_dir = path.parent / "runs"
         runs = [item for item in runs_dir.iterdir() if item.is_dir()] if runs_dir.is_dir() else []
         return {
-            "id": loopd.slugify(path.parent.name),
+            "id": control.slugify(path.parent.name),
             "name": spec.get("workflow") or path.parent.name,
             "path": str(path),
             "cwd": str(path.parent),
@@ -100,7 +100,7 @@ def resolve(identifier: str) -> dict[str, Any] | None:
             "last_run": None,
             "model": spec.get("model"),
         }
-    workflows = loopd.discover_workflows()
+    workflows = control.discover_workflows()
     for workflow in workflows:
         if workflow["id"] == identifier:
             return workflow
@@ -131,7 +131,7 @@ def graph_for(workflow: dict[str, Any]) -> dict[str, Any]:
 
 
 def latest_run(workflow: dict[str, Any]) -> dict[str, Any] | None:
-    runs = loopd.list_workflow_runs(workflow["id"], limit=1, runs_dir=workflow.get("runs_dir"))
+    runs = control.list_workflow_runs(workflow["id"], limit=1, runs_dir=workflow.get("runs_dir"))
     return runs[0] if runs else None
 
 
@@ -169,7 +169,7 @@ def secs(value: float | None) -> str:
 
 
 def cmd_ls(args) -> int:
-    workflows = loopd.discover_workflows()
+    workflows = control.discover_workflows()
     if args.json:
         out(json.dumps(workflows, indent=None, separators=(",", ":")))
         return 0
@@ -754,7 +754,7 @@ def start_via_daemon(
     events_path = body.get("events_path")
     if isinstance(events_path, str) and events_path:
         return Path(events_path)
-    return (loopd.PYGRAPH_EVENTS_DIR / f"{run_id}.jsonl") if run_id else None
+    return (control.PYGRAPH_EVENTS_DIR / f"{run_id}.jsonl") if run_id else None
 
 
 def start_direct(
@@ -763,11 +763,11 @@ def start_direct(
 ) -> tuple[subprocess.Popen, Path]:
     # Unique per invocation, not per second: a timestamp made two runs started in
     # the same second share one event file, so each reported the other's steps.
-    events = loopd.PYGRAPH_EVENTS_DIR / f"cli-{uuid.uuid4().hex[:12]}.jsonl"
+    events = control.PYGRAPH_EVENTS_DIR / f"cli-{uuid.uuid4().hex[:12]}.jsonl"
     events.parent.mkdir(parents=True, exist_ok=True)
     events.touch()
     command = [
-        sys.executable, str(loopd.WORKFLOW_RUNNER), str(workflow["path"]),
+        sys.executable, str(control.WORKFLOW_RUNNER), str(workflow["path"]),
         "--events", str(events),
     ]
     if regen:
@@ -948,7 +948,7 @@ def cmd_run(args) -> int:
 
 def cmd_runs(args) -> int:
     workflow = need(args.workflow)
-    runs = loopd.list_workflow_runs(workflow["id"], limit=args.limit, runs_dir=workflow.get("runs_dir"))
+    runs = control.list_workflow_runs(workflow["id"], limit=args.limit, runs_dir=workflow.get("runs_dir"))
     if args.json:
         out(json.dumps(runs, separators=(",", ":")))
         return 0
@@ -972,10 +972,10 @@ def cmd_show(args) -> int:
     workflow = need(args.workflow)
     run = latest_run(workflow) if not args.run else None
     if args.run:
-        runs = loopd.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
+        runs = control.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
         run = matching_run(runs, args.run)
     if not run:
-        return fail("no matching run (try: pygraph runs <id>)")
+        return fail("no matching run (try: piw runs <id>)")
 
     run_dir = Path(run["path"])
     if not args.step:
@@ -1015,7 +1015,7 @@ def cmd_show(args) -> int:
 
 def cmd_stats(args) -> int:
     workflow = need(args.workflow)
-    runs = loopd.list_workflow_runs(workflow["id"], limit=args.limit, runs_dir=workflow.get("runs_dir"))
+    runs = control.list_workflow_runs(workflow["id"], limit=args.limit, runs_dir=workflow.get("runs_dir"))
     per_step: dict[str, dict[str, Any]] = {}
     total_cost = 0.0
     total_tokens = 0
@@ -1072,7 +1072,7 @@ def cmd_stats(args) -> int:
 
 def cmd_detail(args) -> int:
     workflow = need(args.workflow)
-    runs = loopd.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
+    runs = control.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
     if not runs:
         return fail("no runs yet")
     run = (matching_run(runs, args.run)
@@ -1086,9 +1086,20 @@ def cmd_detail(args) -> int:
         return fail(str(error))
 
     if args.step:
+        # Resolve like the workflow positional does: exact id wins, otherwise a
+        # unique substring. Action-expanded ids are prefixed (parallel-review-
+        # verdict), so demanding an exact match made the obvious `--step verdict`
+        # fail on every graph built from an action.
         selected = next((step for step in detail["steps"] if step["id"] == args.step), None)
         if not selected:
-            return fail(f"run has no step '{args.step}'")
+            matches = [step for step in detail["steps"] if args.step in step["id"]]
+            if len(matches) > 1:
+                names = ", ".join(sorted(step["id"] for step in matches))
+                return fail(f"'{args.step}' is ambiguous: {names}")
+            selected = matches[0] if matches else None
+        if not selected:
+            known = ", ".join(step["id"] for step in detail["steps"])
+            return fail(f"run has no step '{args.step}' (steps: {known})")
         detail["steps"] = [selected]
 
     if args.json:
@@ -1146,7 +1157,7 @@ def cmd_detail(args) -> int:
 def cmd_compare(args) -> int:
     """Compare two evidenced runs without asking a model to summarize them."""
     workflow = need(args.workflow)
-    runs = loopd.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
+    runs = control.list_workflow_runs(workflow["id"], limit=200, runs_dir=workflow.get("runs_dir"))
 
     def selected(query: str) -> dict[str, Any] | None:
         return matching_run(runs, query)
@@ -1237,7 +1248,7 @@ def cmd_compare(args) -> int:
 
 
 def _skill_script(name: str) -> Path:
-    return Path(loopd.WORKFLOW_RUNNER).parent / name
+    return Path(control.WORKFLOW_RUNNER).parent / name
 
 
 def _run_skill(script: str, workflow: dict[str, Any], extra: list[str]) -> int:
@@ -1514,7 +1525,7 @@ def cmd_set(args) -> int:
             return fail("new per-node QA needs " + " and ".join(flags[key] for key in missing))
         changes["judge"] = judge
     if not changes:
-        return fail("nothing to change (see: pygraph set --help)")
+        return fail("nothing to change (see: piw set --help)")
 
     try:
         result = pygraph.update_step(Path(workflow["path"]), args.step, changes)
@@ -1560,7 +1571,7 @@ def cmd_doctor(args) -> int:
         dependencies = False
         dependency_detail = str(error)
     check("dependencies", dependencies, dependency_detail)
-    check("runner", loopd.WORKFLOW_RUNNER.is_file(), str(loopd.WORKFLOW_RUNNER))
+    check("runner", control.WORKFLOW_RUNNER.is_file(), str(control.WORKFLOW_RUNNER))
 
     pi_bin = shutil.which("pi")
     pi_version = "missing"
@@ -1650,7 +1661,7 @@ def cmd_create(args) -> int:
     name = args.name.strip()
     if not name:
         return fail("workflow name required")
-    identifier = loopd.slugify(name)
+    identifier = control.slugify(name)
     directory = Path(args.dir or identifier).expanduser().resolve()
     steps_path = directory / "steps.yaml"
     if steps_path.exists():
@@ -1764,7 +1775,7 @@ def cmd_schedule(args) -> int:
         shlex.quote(workflow["path"]),
         "--json",
     ])
-    loop_id = args.id or loopd.slugify(f"piw-{workflow['name']}")[:63]
+    loop_id = args.id or control.slugify(f"piw-{workflow['name']}")[:63]
     command_args = [
         "create", "--id", loop_id, "--name", args.name or f"Pi Workflow · {workflow['name']}",
         "--instructions", f"Validate and run {workflow['path']}; preserve its run ledger and artifacts.",

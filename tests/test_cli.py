@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,49 @@ class ProductCliTests(unittest.TestCase):
                 self.assertIn(command, text, f"{guide.name} omits {command}")
             self.assertIn("one-step task", text)
             self.assertIn("Done means", text)
+
+    def test_every_piw_command_shown_in_the_readme_actually_exists(self) -> None:
+        """The README shipped `--step verdict` against a graph whose real id was
+        `parallel-review-verdict`, so its headline command exited 1. Parse the
+        commands out of the docs and check them against the CLI's own list."""
+        listing = subprocess.run(
+            [sys.executable, str(CLI), "--help"], capture_output=True, text=True, timeout=60,
+        ).stdout
+        known = set(re.findall(r"^\s{4}([a-z][a-z-]+)\s{2,}", listing, re.M))
+        self.assertIn("run", known, listing)
+
+        for doc in (ROOT / "README.md", ROOT / "SKILL.md"):
+            text = doc.read_text(encoding="utf-8")
+            for command in sorted(set(re.findall(r"\bpiw ([a-z][a-z-]+)", text))):
+                self.assertIn(
+                    command, known,
+                    f"{doc.name} shows `piw {command}`, which is not a piw command",
+                )
+
+    def test_the_readme_step_reference_matches_a_real_scaffolded_step(self) -> None:
+        """The README pairs `piw create --action parallel-review` with a
+        `--step` id. Action expansion prefixes step ids, so the two drift apart
+        silently unless something checks them together."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        referenced = re.search(r"piw detail \S+ RUN_ID --step (\S+)", readme)
+        self.assertIsNotNone(referenced, "README no longer shows a `piw detail --step` example")
+        action = re.search(r"piw create \S+ --action (\S+)", readme)
+        self.assertIsNotNone(action, "README no longer shows a `piw create --action` example")
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            environment = {**os.environ, "PI_WORKFLOWS_ROOTS": str(root), "HOME": str(root)}
+            subprocess.run(
+                [sys.executable, str(CLI), "create", "demo", "--action", action.group(1)],
+                cwd=root, capture_output=True, text=True, env=environment, timeout=120, check=True,
+            )
+            spec = yaml.safe_load((root / "demo" / "steps.yaml").read_text(encoding="utf-8"))
+            ids = [step["id"] for step in spec["steps"]]
+            wanted = referenced.group(1)
+            self.assertTrue(
+                any(wanted == sid or wanted in sid for sid in ids),
+                f"README references --step {wanted}, but the scaffold produces {ids}",
+            )
 
     def test_agent_can_inspect_one_node_compare_runs_and_configure_node_qa(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

@@ -273,10 +273,19 @@ def render_prompt(template: str, run_dir: Path, prev_out: Path | None) -> str:
 
 
 def cache_key(cfg: dict, spec: dict, prompt: str) -> str:
+    """Fingerprint everything a cache hit skips.
+
+    A hit re-runs the gate but skips the model call, the schema check, and the
+    judge. So `judge` and `schema` MUST be part of the key: without them,
+    raising a judge threshold (or tightening a schema) leaves the old artifact
+    cached and the step passes a bar it was never held to.
+    """
     parts = [str(cfg.get("model", spec.get("model"))),
              str(cfg.get("thinking", spec.get("thinking", "medium"))),
              str(cfg["system"] if "system" in cfg else spec.get("system", "")),
-             str(cfg.get("tools", "")), str(bool(cfg.get("agent"))), prompt]
+             str(cfg.get("tools", "")), str(bool(cfg.get("agent"))), prompt,
+             json.dumps(cfg.get("judge"), sort_keys=True, default=str),
+             json.dumps(cfg.get("schema"), sort_keys=True, default=str)]
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
 
 

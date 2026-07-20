@@ -6,7 +6,7 @@ It does not execute anything; it parses a ``steps.yaml`` into nodes and edges so
 the canvas can draw exactly the graph the runner will execute.
 
 The dependency rules below are a faithful port of ``run_steps.build_deps``. If
-they drift, the canvas lies about what will run — so ``test_pygraph.py`` pins
+they drift, the canvas lies about what will run — so ``tests/test_runner_contracts.py`` pins
 them against the real skill file.
 
 Layout lives in a sidecar ``steps.layout.json`` next to the yaml; steps.yaml is
