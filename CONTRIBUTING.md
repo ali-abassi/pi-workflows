@@ -9,9 +9,7 @@ runtime improvements.
 python3 -m venv .venv
 .venv/bin/python -m pip install 'PyYAML>=6,<7' 'ruamel.yaml>=0.18,<0.19' 'jsonschema>=4.23,<5'
 npm ci --ignore-scripts
-npm test
-npm run check
-npm run test:examples
+npm run verify
 ```
 
 ## Expectations

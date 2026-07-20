@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ali-abassi/pi-workflows/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ali-abassi/pi-workflows/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/ali-abassi/pi-workflows/releases"><img alt="release" src="https://img.shields.io/github/v/release/ali-abassi/pi-workflows"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-11110f"></a>
 </p>
@@ -159,8 +158,12 @@ recorder over the same `steps.yaml`.
 ```bash
 python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
 npm ci --ignore-scripts
-npm test && npm run check && npm run test:examples
+npm run verify        # or ./scripts/check.sh
 ```
+
+`verify` is the full gate: unit and extension tests, typecheck, every example
+validated, a live end-to-end run, and regression guards for bugs that have
+shipped before. Run it before opening a pull request.
 
 pi workflows executes shell commands and model calls with your permissions.
 Review third-party workflows before running them; see [`SECURITY.md`](SECURITY.md).
